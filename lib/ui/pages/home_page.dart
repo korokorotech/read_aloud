@@ -73,6 +73,13 @@ class _HomePageState extends State<HomePage> {
     await _loadNewsSets(showSpinner: false);
   }
 
+  Future<void> _handlePlaySet(NewsSetSummary set) async {
+    await context.pushPlayer(
+      setId: set.id,
+      setName: set.name,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -127,6 +134,7 @@ class _HomePageState extends State<HomePage> {
                                         subtitle:
                                             '${set.articleCount}件・最終更新 ${_formatUpdatedAt(set.updatedAt)}',
                                         onTap: () => _handleOpenSet(set),
+                                        onPlay: () => _handlePlaySet(set),
                                       );
                                     },
                                   ),
@@ -229,11 +237,13 @@ class _NewsSetCard extends StatelessWidget {
     required this.newsSet,
     required this.subtitle,
     required this.onTap,
+    required this.onPlay,
   });
 
   final NewsSetSummary newsSet;
   final String subtitle;
   final VoidCallback onTap;
+  final VoidCallback onPlay;
 
   @override
   Widget build(BuildContext context) {
@@ -276,6 +286,21 @@ class _NewsSetCard extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Colors.grey[700],
                           ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.icon(
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('再生'),
+                        onPressed: onPlay,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),

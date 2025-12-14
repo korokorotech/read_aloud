@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:read_aloud/ui/pages/home_page.dart';
 import 'package:read_aloud/ui/pages/news_set_detail_page.dart';
+import 'package:read_aloud/ui/pages/player_page.dart';
 import 'package:read_aloud/ui/pages/web_view_page.dart';
 import 'package:read_aloud/ui/routes/page_route_args/webview_page_route_args.dart';
 
@@ -11,6 +12,7 @@ class RouteNames {
   static const homePage = 'HomePage';
   static const newsSetDetailPage = 'NewsSetDetailPage';
   static const webViewPage = 'WebViewPage';
+  static const playerPage = 'PlayerPage';
 
   // モーダルをルート化する場合
   static const newsSetModal = 'NewsSetModal';
@@ -21,6 +23,7 @@ class RoutePaths {
   static const homePage = '/';
   static const newsSetDetailPage = '/sets/:setId';
   static const webViewPage = '/sets/:setId/web';
+  static const playerPage = '/sets/:setId/player';
 
   // モーダルをルート化する場合
   static const newSetModal = '/sets/new';
@@ -76,8 +79,7 @@ class AppRouter {
                       return const MaterialPage(child: HomePage());
                     }
 
-                    final setName =
-                        webArgs?.setName ?? 'セット $setId';
+                    final setName = webArgs?.setName ?? 'セット $setId';
 
                     return MaterialPage(
                       child: WebViewPage(
@@ -85,6 +87,20 @@ class AppRouter {
                         setName: setName,
                         initialUrl: initialUrl,
                         openAddMode: webArgs?.openAddMode ?? false,
+                      ),
+                    );
+                  },
+                ),
+                GoRoute(
+                  name: RouteNames.playerPage,
+                  path: 'player',
+                  pageBuilder: (context, state) {
+                    final setId = state.pathParameters['setId']!;
+                    final setName = state.uri.queryParameters['name'];
+                    return MaterialPage(
+                      child: PlayerPage(
+                        setId: setId,
+                        initialSetName: setName,
                       ),
                     );
                   },
@@ -151,6 +167,17 @@ extension AppRouteNav on BuildContext {
         initialUrl: initialUrl,
         openAddMode: openAddMode,
       ),
+    );
+  }
+
+  Future<T?> pushPlayer<T>({
+    required String setId,
+    String? setName,
+  }) {
+    return pushNamed<T>(
+      RouteNames.playerPage,
+      pathParameters: {'setId': setId},
+      queryParameters: {'name': setName ?? ""},
     );
   }
 }
