@@ -38,6 +38,8 @@ dependencies:
   go_router: ^17.0.1
   flutter_inappwebview: ^6.1.5
   flutter_tts: ^4.0.2
+  sqflite: ^2.3.3+1
+  path: ^1.9.1
 
 dev_dependencies:
   flutter_test:

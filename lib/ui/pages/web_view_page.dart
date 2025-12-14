@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:read_aloud/data/news_item_repository.dart';
 
 class WebViewPage extends StatefulWidget {
   const WebViewPage({
@@ -29,6 +30,7 @@ class WebViewPage extends StatefulWidget {
 class _WebViewPageState extends State<WebViewPage> {
   late bool _isAddMode;
   late String _setName;
+  late final NewsItemRepository _newsItemRepository;
   InAppWebViewController? _webViewController;
   final FlutterTts _flutterTts = FlutterTts();
   final List<_CachedArticle> _cachedArticles = [];
@@ -41,6 +43,7 @@ class _WebViewPageState extends State<WebViewPage> {
     super.initState();
     _isAddMode = widget.openAddMode;
     _setName = widget.setName;
+    _newsItemRepository = NewsItemRepository();
     _ttsInitFuture = _setupTts();
     _readabilityUserScriptFuture = _loadReadabilityUserScript();
   }
@@ -179,28 +182,51 @@ class _WebViewPageState extends State<WebViewPage> {
 
   Future<void> _captureArticle(String url) async {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
+    final messenger = ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(content: Text('本文を解析中です: $url')),
       );
 
     try {
-      final text = await _extractReadableTextFromUrl(url);
+      final article = await _extractArticleFromUrl(url);
       if (!mounted) return;
 
-      if (text == null || text.isEmpty) {
+      if (article == null || article.content.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('本文を取得できませんでした: $url')),
         );
         return;
       }
 
+      final preview = _buildPreviewText(article);
+      final saved = await _newsItemRepository.insertArticle(
+        setId: widget.setId,
+        setName: _setName,
+        url: url,
+        previewText: preview,
+        articleText: article.content,
+      );
+
+      if (!mounted) return;
       setState(() {
-        _cachedArticles.add(_CachedArticle(url: url, content: text));
+        _cachedArticles.add(
+          _CachedArticle(
+            id: saved.id,
+            url: url,
+            title: article.title?.trim().isNotEmpty == true
+                ? article.title!.trim()
+                : preview,
+            content: article.content,
+          ),
+        );
       });
+      _showAddedSnackBar(saved);
+    } on DuplicateArticleException {
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('記事を保存しました (${_cachedArticles.length}件)')),
+        const SnackBar(content: Text('このURLは既にセットに追加されています。')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -208,6 +234,59 @@ class _WebViewPageState extends State<WebViewPage> {
         SnackBar(content: Text('記事取得エラー: $e')),
       );
     }
+  }
+
+  void _showAddedSnackBar(NewsItemRecord item) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('キューに追加しました'),
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'もとに戻す',
+            onPressed: () {
+              unawaited(_undoInsert(item));
+            },
+          ),
+        ),
+      );
+  }
+
+  Future<void> _undoInsert(NewsItemRecord item) async {
+    try {
+      await _newsItemRepository.deleteArticle(item.id);
+      if (!mounted) return;
+      setState(() {
+        _cachedArticles.removeWhere((article) => article.id == item.id);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('直前の追加を取り消しました。')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('取り消しに失敗しました: $e')),
+      );
+    }
+  }
+
+  String _buildPreviewText(_ExtractedArticle article) {
+    final title = article.title?.trim();
+    if (title != null && title.isNotEmpty) {
+      return title;
+    }
+
+    final body = article.content.trim();
+    if (body.isEmpty) {
+      return '無題の記事';
+    }
+
+    const maxLength = 80;
+    return body.length <= maxLength
+        ? body
+        : '${body.substring(0, maxLength)}…';
   }
 
   Future<void> _playCachedContent() async {
@@ -240,9 +319,9 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
-  Future<String?> _extractReadableTextFromUrl(String url) async {
+  Future<_ExtractedArticle?> _extractArticleFromUrl(String url) async {
     final userScript = await _readabilityUserScriptFuture;
-    final completer = Completer<String?>();
+    final completer = Completer<_ExtractedArticle?>();
 
     late HeadlessInAppWebView headless;
     headless = HeadlessInAppWebView(
@@ -255,9 +334,9 @@ class _WebViewPageState extends State<WebViewPage> {
       onWebViewCreated: (_) {},
       onLoadStop: (controller, _) async {
         try {
-          final text = await _extractReadableText(controller);
+          final article = await _extractReadableArticle(controller);
           if (!completer.isCompleted) {
-            completer.complete(text);
+            completer.complete(article);
           }
         } catch (_) {
           if (!completer.isCompleted) {
@@ -284,7 +363,7 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
-  Future<String?> _extractReadableText(
+  Future<_ExtractedArticle?> _extractReadableArticle(
       InAppWebViewController controller) async {
     final raw = await controller.evaluateJavascript(
       source: _readabilityExtractorJs,
@@ -296,13 +375,16 @@ class _WebViewPageState extends State<WebViewPage> {
 
     final Map<String, dynamic> result = jsonDecode(jsonStr);
     if (result['ok'] == true) {
-      var text = (result['text'] as String?);
-      if (text != null) {
-        text = normalize(text);
+      final text = result['text'] as String?;
+      final title = result['title'] as String?;
+      if (text == null) {
+        return null;
       }
-      if (text != null && text.isNotEmpty) {
-        return text;
+      final normalized = normalize(text);
+      if (normalized.isEmpty) {
+        return null;
       }
+      return _ExtractedArticle(title: title, content: normalized);
     } else {
       debugPrint('Readability failed: ${result['error']}');
     }
@@ -436,10 +518,24 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 }
 
-class _CachedArticle {
-  _CachedArticle({required this.url, required this.content});
+class _ExtractedArticle {
+  const _ExtractedArticle({this.title, required this.content});
 
+  final String? title;
+  final String content;
+}
+
+class _CachedArticle {
+  _CachedArticle({
+    required this.id,
+    required this.url,
+    required this.title,
+    required this.content,
+  });
+
+  final String id;
   final String url;
+  final String title;
   final String content;
 }
 
