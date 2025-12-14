@@ -1,0 +1,217 @@
+import 'package:flutter/material.dart';
+
+enum NewsSetAddOption {
+  searchGoogle,
+  googleNews,
+  customUrl,
+}
+
+extension NewsSetAddOptionLabel on NewsSetAddOption {
+  String get label {
+    switch (this) {
+      case NewsSetAddOption.searchGoogle:
+        return '検索して追加（Google検索）';
+      case NewsSetAddOption.googleNews:
+        return 'ニュースから追加（Googleニュース）';
+      case NewsSetAddOption.customUrl:
+        return 'その他のサイトから追加';
+    }
+  }
+
+  String get description {
+    switch (this) {
+      case NewsSetAddOption.searchGoogle:
+        return 'Google検索へ遷移します';
+      case NewsSetAddOption.googleNews:
+        return 'Googleニュースへ遷移します';
+      case NewsSetAddOption.customUrl:
+        return 'URLを入力して任意のサイトへ遷移します';
+    }
+  }
+}
+
+class NewsSetCreateResult {
+  const NewsSetCreateResult({
+    required this.setName,
+    required this.option,
+    this.customUrl,
+  });
+
+  final String setName;
+  final NewsSetAddOption option;
+  final Uri? customUrl;
+}
+
+class NewsSetCreateModal extends StatefulWidget {
+  const NewsSetCreateModal({
+    super.key,
+    required this.initialName,
+  });
+
+  final String initialName;
+
+  @override
+  State<NewsSetCreateModal> createState() => _NewsSetCreateModalState();
+}
+
+class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _urlController;
+  NewsSetAddOption _selectedOption = NewsSetAddOption.searchGoogle;
+  String? _urlErrorText;
+
+  bool get _requiresUrl => _selectedOption == NewsSetAddOption.customUrl;
+
+  bool get _isNextEnabled {
+    final nameFilled = _nameController.text.trim().isNotEmpty;
+    if (!nameFilled) return false;
+    if (!_requiresUrl) return true;
+    return Uri.tryParse(_urlController.text.trim()) != null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+    _urlController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  void _handleNext() {
+    final setName = _nameController.text.trim();
+    if (setName.isEmpty) return;
+
+    Uri? customUrl;
+    if (_requiresUrl) {
+      customUrl = Uri.tryParse(_urlController.text.trim());
+      if (customUrl == null) {
+        setState(() {
+          _urlErrorText = '有効なURLを入力してください';
+        });
+        return;
+      }
+    }
+
+    Navigator.of(context).pop(
+      NewsSetCreateResult(
+        setName: setName,
+        option: _selectedOption,
+        customUrl: customUrl,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final padding = MediaQuery.of(context).viewInsets +
+        const EdgeInsets.symmetric(horizontal: 24, vertical: 24);
+
+    return SafeArea(
+      child: Padding(
+        padding: padding,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'ニュースセット新規作成',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'ニュースセット名',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 20),
+              DropdownButtonFormField<NewsSetAddOption>(
+                value: _selectedOption,
+                isExpanded: true,
+                items: NewsSetAddOption.values
+                    .map(
+                      (option) => DropdownMenuItem(
+                        value: option,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(option.label),
+                            const SizedBox(height: 4),
+                            Text(
+                              option.description,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
+                decoration: const InputDecoration(
+                  labelText: '追加方法',
+                  border: OutlineInputBorder(),
+                ),
+                selectedItemBuilder: (context) => NewsSetAddOption.values
+                    .map(
+                      (option) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(option.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (option) {
+                  if (option == null) return;
+                  setState(() {
+                    _selectedOption = option;
+                    if (!_requiresUrl) {
+                      _urlErrorText = null;
+                    }
+                  });
+                },
+              ),
+              if (_requiresUrl) ...[
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _urlController,
+                  decoration: InputDecoration(
+                    labelText: '移動先URL',
+                    border: const OutlineInputBorder(),
+                    errorText: _urlErrorText,
+                  ),
+                  keyboardType: TextInputType.url,
+                  onChanged: (_) {
+                    setState(() {
+                      _urlErrorText = null;
+                    });
+                  },
+                ),
+              ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _isNextEnabled ? _handleNext : null,
+                  child: const Text('次へ'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

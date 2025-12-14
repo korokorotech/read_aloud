@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:read_aloud/ui/pages/news_set_create_modal.dart';
 
 class NewsSet {
   NewsSet({
@@ -38,9 +39,35 @@ class _HomePageState extends State<HomePage> {
     ),
   ];
 
-  void _handleCreateNewSet() {
+  DateTime? _lastGeneratedDate;
+  int _generatedCountForDay = 0;
+
+  Future<void> _handleCreateNewSet() async {
+    final (initialName, suggestedDate, suggestedSequence) =
+        _buildDefaultSetNameSuggestion();
+    final result = await showModalBottomSheet<NewsSetCreateResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => NewsSetCreateModal(
+        initialName: initialName,
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (result == null) {
+      return;
+    }
+
+    _commitDefaultSetNameSuggestion(suggestedDate, suggestedSequence);
+
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('新規作成のモックです。')),
+      SnackBar(
+        content: Text('「${result.setName}」を作成して次のフローに進む予定です。'),
+      ),
     );
   }
 
@@ -126,6 +153,26 @@ class _HomePageState extends State<HomePage> {
     return '${dateTime.year}/${_twoDigits(dateTime.month)}/${_twoDigits(dateTime.day)}'
         ' ${_twoDigits(dateTime.hour)}:${_twoDigits(dateTime.minute)}';
   }
+
+  (String, DateTime, int) _buildDefaultSetNameSuggestion() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final isSameDay =
+        _lastGeneratedDate != null && _isSameDate(_lastGeneratedDate!, today);
+    final nextSequence = isSameDay ? _generatedCountForDay + 1 : 1;
+    final dateStr =
+        '${now.year}${_twoDigits(now.month)}${_twoDigits(now.day)}';
+    final suffix = _twoDigits(nextSequence);
+    return ('$dateStr-$suffix', today, nextSequence);
+  }
+
+  void _commitDefaultSetNameSuggestion(DateTime date, int sequence) {
+    _lastGeneratedDate = date;
+    _generatedCountForDay = sequence;
+  }
+
+  bool _isSameDate(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   String _twoDigits(int value) => value.toString().padLeft(2, '0');
 }
