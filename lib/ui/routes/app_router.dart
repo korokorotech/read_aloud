@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:read_aloud/ui/pages/home_page.dart';
 import 'package:read_aloud/ui/pages/news_set_detail_page.dart';
 import 'package:read_aloud/ui/pages/web_view_page.dart';
+import 'package:read_aloud/ui/routes/page_route_args/webview_page_route_args.dart';
 
 /// ルート名（typed navigation しやすくする）
 class RouteNames {
@@ -17,46 +18,28 @@ class RouteNames {
 
 /// パス定義
 class RoutePaths {
-  static const home = '/';
-  static const setDetail = '/sets/:setId';
-  static const webView = '/sets/:setId/web';
+  static const homePage = '/';
+  static const newsSetDetailPage = '/sets/:setId';
+  static const webViewPage = '/sets/:setId/web';
 
   // モーダルをルート化する場合
   static const newSetModal = '/sets/new';
-}
-
-/// WebView に渡す引数（開始URLなど）
-/// - 「検索して追加」「ニュースから追加」「その他URL」いずれも initialUrl で統一
-@immutable
-class WebViewRouteArgs {
-  const WebViewRouteArgs({
-    required this.initialUrl,
-    this.openAddMode = false,
-  });
-
-  final Uri initialUrl;
-
-  /// 例えば「到達時は追加モードONにしたい」等があれば使う
-  final bool openAddMode;
 }
 
 class AppRouter {
   AppRouter._();
 
   static final rootNavigatorKey = GlobalKey<NavigatorState>();
-  static final shellNavigatorKey =
-      GlobalKey<NavigatorState>(); // 将来ShellRoute化するなら
 
-  /// GoRouter 本体
   static GoRouter create() {
     return GoRouter(
       navigatorKey: rootNavigatorKey,
-      initialLocation: RoutePaths.home,
+      initialLocation: RoutePaths.homePage,
       debugLogDiagnostics: true,
       routes: <RouteBase>[
         GoRoute(
           name: RouteNames.homePage,
-          path: RoutePaths.home,
+          path: RoutePaths.homePage,
           pageBuilder: (context, state) => const MaterialPage(
             child: HomePage(),
           ),
