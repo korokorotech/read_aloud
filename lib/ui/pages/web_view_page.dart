@@ -405,6 +405,80 @@ class _WebViewPageState extends State<WebViewPage> {
         .trim();
   }
 
+  String? _normalizeUrl(String url) {
+    final parsed = Uri.tryParse(url);
+    if (parsed == null) {
+      return null;
+    }
+
+    Uri current = parsed;
+    final redirected = _resolveGoogleRedirect(parsed);
+    if (redirected != null) {
+      current = redirected;
+    }
+
+    if (current.queryParameters.isEmpty) {
+      return current.toString();
+    }
+
+    final filtered = <String, String>{};
+    var changed = false;
+    current.queryParameters.forEach((key, value) {
+      if (_shouldDropQueryParam(key)) {
+        changed = true;
+      } else {
+        filtered[key] = value;
+      }
+    });
+
+    if (changed) {
+      current = current.replace(
+        queryParameters: filtered.isEmpty ? null : filtered,
+      );
+    }
+    return current.toString();
+  }
+
+  Uri? _resolveGoogleRedirect(Uri uri) {
+    final host = uri.host.toLowerCase();
+    if (!(host.contains('google.') || host.endsWith('google'))) {
+      return null;
+    }
+    if (uri.path != '/url') {
+      return null;
+    }
+    final q = uri.queryParameters['q'];
+    if (q == null || q.isEmpty) {
+      return null;
+    }
+    final redirected = Uri.tryParse(q);
+    if (redirected == null || redirected.scheme.isEmpty) {
+      return null;
+    }
+    return redirected;
+  }
+
+  bool _shouldDropQueryParam(String key) {
+    final lower = key.toLowerCase();
+    if (lower.startsWith('utm_')) return true;
+    const dropList = {
+      'ref',
+      'ref_src',
+      'fbclid',
+      'gclid',
+      'yclid',
+      'mc_cid',
+      'mc_eid',
+      'igshid',
+      'mkt_tok',
+      'acd',
+      'ved',
+      'sa',
+      'usg',
+    };
+    return dropList.contains(lower);
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<UserScript>(
@@ -475,7 +549,8 @@ class _WebViewPageState extends State<WebViewPage> {
               if (_isAddMode &&
                   uri != null &&
                   navigationAction.isForMainFrame) {
-                unawaited(_captureArticle(uri.toString()));
+                final normalized = _normalizeUrl(uri.toString());
+                unawaited(_captureArticle(normalized ?? uri.toString()));
                 return NavigationActionPolicy.CANCEL;
               }
               return NavigationActionPolicy.ALLOW;
