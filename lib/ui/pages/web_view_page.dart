@@ -7,7 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:go_router/go_router.dart';
-import 'package:read_aloud/data/news_item_repository.dart';
+import 'package:read_aloud/entities/news_item_record.dart';
+import 'package:read_aloud/repositories/news_item_repository.dart';
 
 class WebViewPage extends StatefulWidget {
   const WebViewPage({
@@ -284,9 +285,7 @@ class _WebViewPageState extends State<WebViewPage> {
     }
 
     const maxLength = 80;
-    return body.length <= maxLength
-        ? body
-        : '${body.substring(0, maxLength)}…';
+    return body.length <= maxLength ? body : '${body.substring(0, maxLength)}…';
   }
 
   Future<void> _playCachedContent() async {
