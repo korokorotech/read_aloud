@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class WebViewPage extends StatefulWidget {
   const WebViewPage({
@@ -22,6 +23,7 @@ class WebViewPage extends StatefulWidget {
 class _WebViewPageState extends State<WebViewPage> {
   late bool _isAddMode;
   late String _setName;
+  InAppWebViewController? _webViewController;
 
   @override
   void initState() {
@@ -148,68 +150,42 @@ class _WebViewPageState extends State<WebViewPage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: _WebViewPlaceholder(isAddMode: _isAddMode),
+            child: InAppWebView(
+              initialUrlRequest: URLRequest(
+                url: WebUri(widget.initialUrl.toString()),
+              ),
+              initialSettings: InAppWebViewSettings(
+                useHybridComposition: true,
+                mediaPlaybackRequiresUserGesture: false,
+              ),
+              onWebViewCreated: (controller) {
+                _webViewController = controller;
+              },
+            ),
           ),
           Positioned(
-              left: 16,
-              bottom: 20,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  FilledButton.icon(
-                    icon: const Icon(Icons.tune),
-                    label: const Text('一括設定'),
-                    onPressed: _handleBulkAdd,
+            left: 16,
+            bottom: 20,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FilledButton.icon(
+                  icon: const Icon(Icons.tune),
+                  label: const Text('一括設定'),
+                  onPressed: _handleBulkAdd,
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  icon: Icon(
+                    _isAddMode ? Icons.check_circle : Icons.add_circle,
                   ),
-                  FilledButton.icon(
-                    icon: Icon(
-                      _isAddMode ? Icons.check_circle : Icons.add_circle,
-                    ),
-                    label: Text(_isAddMode ? '追加モード ON' : 'ニュース追加モード'),
-                    onPressed: _toggleAddMode,
-                  ),
-                ],
-              )),
+                  label: Text(_isAddMode ? '追加モード ON' : 'ニュース追加モード'),
+                  onPressed: _toggleAddMode,
+                ),
+              ],
+            ),
+          ),
         ],
-      ),
-    );
-  }
-}
-
-class _WebViewPlaceholder extends StatelessWidget {
-  const _WebViewPlaceholder({required this.isAddMode});
-
-  final bool isAddMode;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      color: Colors.grey[200],
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.web,
-              size: 64,
-              color: theme.colorScheme.primary.withOpacity(0.5),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'WebView 表示エリア（モック）',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isAddMode
-                  ? 'ニュース追加モード: ON\nリンクをタップするとキューに追加される想定です。'
-                  : 'リンクをタップすると通常遷移します。',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
       ),
     );
   }
