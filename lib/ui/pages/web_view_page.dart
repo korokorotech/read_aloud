@@ -145,35 +145,32 @@ class _WebViewPageState extends State<WebViewPage> {
           ],
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: _WebViewPlaceholder(isAddMode: _isAddMode),
-            ),
-            Positioned(
-                left: 16,
-                bottom: 20,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    FilledButton.icon(
-                      icon: const Icon(Icons.tune),
-                      label: const Text('一括設定'),
-                      onPressed: _handleBulkAdd,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: _WebViewPlaceholder(isAddMode: _isAddMode),
+          ),
+          Positioned(
+              left: 16,
+              bottom: 20,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FilledButton.icon(
+                    icon: const Icon(Icons.tune),
+                    label: const Text('一括設定'),
+                    onPressed: _handleBulkAdd,
+                  ),
+                  FilledButton.icon(
+                    icon: Icon(
+                      _isAddMode ? Icons.check_circle : Icons.add_circle,
                     ),
-                    FilledButton.icon(
-                      icon: Icon(
-                        _isAddMode ? Icons.check_circle : Icons.add_circle,
-                      ),
-                      label: Text(_isAddMode ? '追加モード ON' : 'ニュース追加モード'),
-                      onPressed: _toggleAddMode,
-                    ),
-                  ],
-                )),
-          ],
-        ),
+                    label: Text(_isAddMode ? '追加モード ON' : 'ニュース追加モード'),
+                    onPressed: _toggleAddMode,
+                  ),
+                ],
+              )),
+        ],
       ),
     );
   }
@@ -188,13 +185,7 @@ class _WebViewPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.colorScheme.primary.withOpacity(0.2),
-        ),
-      ),
+      color: Colors.grey[200],
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
