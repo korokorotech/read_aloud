@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:read_aloud/entities/news_item_record.dart';
 import 'package:read_aloud/entities/news_set_detail.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
 

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:read_aloud/ui/pages/home_page.dart';
 import 'package:read_aloud/ui/pages/news_set_detail_page.dart';
-import 'package:read_aloud/ui/pages/player_page.dart';
 import 'package:read_aloud/ui/pages/web_view_page.dart';
 import 'package:read_aloud/ui/routes/page_route_args/webview_page_route_args.dart';
 
@@ -12,7 +11,6 @@ class RouteNames {
   static const homePage = 'HomePage';
   static const newsSetDetailPage = 'NewsSetDetailPage';
   static const webViewPage = 'WebViewPage';
-  static const playerPage = 'PlayerPage';
 
   // モーダルをルート化する場合
   static const newsSetModal = 'NewsSetModal';
@@ -23,7 +21,6 @@ class RoutePaths {
   static const homePage = '/';
   static const newsSetDetailPage = '/sets/:setId';
   static const webViewPage = '/sets/:setId/web';
-  static const playerPage = '/sets/:setId/player';
 
   // モーダルをルート化する場合
   static const newSetModal = '/sets/new';
@@ -52,8 +49,12 @@ class AppRouter {
               path: 'sets/:setId', // ← home配下の相対パスでもOK
               pageBuilder: (context, state) {
                 final setId = state.pathParameters['setId']!;
+                final autoPlay = state.uri.queryParameters['autoPlay'] == '1';
                 return MaterialPage(
-                  child: NewsSetDetailPage(setId: setId),
+                  child: NewsSetDetailPage(
+                    setId: setId,
+                    autoStartPlayback: autoPlay,
+                  ),
                 );
               },
               routes: [
@@ -91,20 +92,6 @@ class AppRouter {
                     );
                   },
                 ),
-                GoRoute(
-                  name: RouteNames.playerPage,
-                  path: 'player',
-                  pageBuilder: (context, state) {
-                    final setId = state.pathParameters['setId']!;
-                    final setName = state.uri.queryParameters['name'];
-                    return MaterialPage(
-                      child: PlayerPage(
-                        setId: setId,
-                        initialSetName: setName,
-                      ),
-                    );
-                  },
-                ),
               ],
             ),
           ],
@@ -128,12 +115,17 @@ class AppRouter {
 extension AppRouteNav on BuildContext {
   void goHome() => goNamed(RouteNames.homePage);
 
-  void goSetDetail(String setId) =>
-      goNamed(RouteNames.newsSetDetailPage, pathParameters: {'setId': setId});
+  // void goSetDetail(String setId, {bool autoPlay = false}) => goNamed(
+  //       RouteNames.newsSetDetailPage,
+  //       pathParameters: {'setId': setId},
+  //       queryParameters: autoPlay ? {'autoPlay': '1'} : null,
+  //     );
 
-  Future<T?> pushSetDetail<T>(String setId) => pushNamed<T>(
+  Future<T?> pushSetDetail<T>(String setId, {bool autoPlay = false}) =>
+      pushNamed<T>(
         RouteNames.newsSetDetailPage,
         pathParameters: {'setId': setId},
+        queryParameters: autoPlay ? {'autoPlay': '1'} : {},
       );
 
   void goWebView({
@@ -167,17 +159,6 @@ extension AppRouteNav on BuildContext {
         initialUrl: initialUrl,
         openAddMode: openAddMode,
       ),
-    );
-  }
-
-  Future<T?> pushPlayer<T>({
-    required String setId,
-    String? setName,
-  }) {
-    return pushNamed<T>(
-      RouteNames.playerPage,
-      pathParameters: {'setId': setId},
-      queryParameters: {'name': setName ?? ""},
     );
   }
 }

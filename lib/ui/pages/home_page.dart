@@ -74,10 +74,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _handlePlaySet(NewsSetSummary set) async {
-    await context.pushPlayer(
-      setId: set.id,
-      setName: set.name,
-    );
+    await context.pushSetDetail(set.id, autoPlay: true);
+    if (!mounted) return;
+    await _loadNewsSets(showSpinner: false);
   }
 
   @override
