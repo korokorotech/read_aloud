@@ -103,25 +103,20 @@ class _WebViewPageState extends State<WebViewPage> {
       _isAddMode = !_isAddMode;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isAddMode
-            ? 'ニュース追加モードをオンにしました。リンクをタップすると「リンク先をニュースセットに追加しました」想定。'
-            : 'ニュース追加モードをオフにしました。'),
-        action: _isAddMode
-            ? SnackBarAction(
-                label: '取消',
-                onPressed: () {
-                  if (!mounted) return;
-                  setState(() {
-                    _isAddMode = false;
-                  });
-                },
-              )
-            : null,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            _isAddMode ? 'ニュース追加モードをオンにしました。' : 'ニュース追加モードをオフにしました。',
+          ),
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'OK',
+            onPressed: ScaffoldMessenger.of(context).hideCurrentSnackBar,
+          ),
+        ),
+      );
   }
 
   @override
@@ -152,51 +147,31 @@ class _WebViewPageState extends State<WebViewPage> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            Text(
-              '閲覧中URL：${widget.initialUrl}',
-              style: Theme.of(context).textTheme.bodyMedium,
+            Positioned.fill(
+              child: _WebViewPlaceholder(isAddMode: _isAddMode),
             ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: Stack(
-                children: [
-                  _WebViewPlaceholder(isAddMode: _isAddMode),
-                  Positioned(
-                    right: 16,
-                    bottom: 100,
-                    child: FilledButton.icon(
+            Positioned(
+                left: 16,
+                bottom: 20,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FilledButton.icon(
                       icon: const Icon(Icons.tune),
                       label: const Text('一括設定'),
                       onPressed: _handleBulkAdd,
                     ),
-                  ),
-                  Positioned(
-                    right: 16,
-                    bottom: 32,
-                    child: FilledButton.icon(
+                    FilledButton.icon(
                       icon: Icon(
                         _isAddMode ? Icons.check_circle : Icons.add_circle,
                       ),
-                      label: Text(
-                          _isAddMode ? '追加モード ON' : 'ニュース追加モード'),
+                      label: Text(_isAddMode ? '追加モード ON' : 'ニュース追加モード'),
                       onPressed: _toggleAddMode,
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton.icon(
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('戻る'),
-                onPressed: _handleBack,
-              ),
-            ),
+                  ],
+                )),
           ],
         ),
       ),
