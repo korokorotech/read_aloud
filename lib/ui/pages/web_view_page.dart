@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 
 class WebViewPage extends StatefulWidget {
   const WebViewPage({
@@ -32,6 +34,7 @@ class _WebViewPageState extends State<WebViewPage> {
   final List<_CachedArticle> _cachedArticles = [];
   bool _isSpeaking = false;
   late final Future<void> _ttsInitFuture;
+  late final Future<UserScript> _readabilityUserScriptFuture;
 
   @override
   void initState() {
@@ -39,6 +42,7 @@ class _WebViewPageState extends State<WebViewPage> {
     _isAddMode = widget.openAddMode;
     _setName = widget.setName;
     _ttsInitFuture = _setupTts();
+    _readabilityUserScriptFuture = _loadReadabilityUserScript();
   }
 
   @override
@@ -48,11 +52,7 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   Future<void> _setupTts() async {
-    // await _flutterTts.setSharedInstance(true);
-
-    print("TEST_D 11 ${await _flutterTts.getDefaultEngine}");
-    print("TEST_D 12 ${await _flutterTts.getDefaultVoice}");
-
+    await _flutterTts.setSharedInstance(true);
     await _flutterTts.setLanguage('ja-JP');
     await _flutterTts.setSpeechRate(1);
     await _flutterTts.awaitSpeakCompletion(true);
@@ -70,8 +70,26 @@ class _WebViewPageState extends State<WebViewPage> {
     });
   }
 
-  void _handleBack() {
-    context.pop();
+  Future<UserScript> _loadReadabilityUserScript() async {
+    final source = await rootBundle.loadString('assets/js/Readability.js');
+    return UserScript(
+      source: source,
+      injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
+    );
+  }
+
+  Future<void> _handleBack() async {
+    final controller = _webViewController;
+    if (controller != null && await controller.canGoBack()) {
+      await controller.goBack();
+      return;
+    }
+
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.pop();
+    }
   }
 
   Future<void> _handleRename() async {
@@ -160,22 +178,26 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   Future<void> _captureArticle(String url) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text('本文を解析中です: $url')),
+      );
+
     try {
-      final uri = Uri.parse(url);
-      final response = await http.get(uri);
-      if (response.statusCode != 200) {
-        if (!mounted) return;
+      final text = await _extractReadableTextFromUrl(url);
+      if (!mounted) return;
+
+      if (text == null || text.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('取得に失敗しました: $url')),
+          SnackBar(content: Text('本文を取得できませんでした: $url')),
         );
         return;
       }
 
-      final content = _stripHtml(response.body);
-      if (!mounted) return;
       setState(() {
-        _cachedArticles
-            .add(_CachedArticle(url: uri.toString(), content: content));
+        _cachedArticles.add(_CachedArticle(url: url, content: text));
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('記事を保存しました (${_cachedArticles.length}件)')),
@@ -189,15 +211,24 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   Future<void> _playCachedContent() async {
+    if (_cachedArticles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('保存された本文がありません。')),
+      );
+      return;
+    }
+
     try {
       await _ttsInitFuture;
       await _flutterTts.stop();
-      await _flutterTts.setPitch(1);
+      final buffer = StringBuffer();
+      for (final article in _cachedArticles) {
+        buffer.writeln(article.content);
+      }
       setState(() {
         _isSpeaking = true;
       });
-      await _flutterTts.speak('はむこ、はむころ、ハムスター');
-      await _flutterTts.stop();
+      await _flutterTts.speak(buffer.toString());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -209,102 +240,198 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
-  String _stripHtml(String html) {
-    final withoutScripts = html.replaceAll(
-        RegExp(r'<script[^>]*>.*?</script>',
-            dotAll: true, caseSensitive: false),
-        '');
-    final withoutStyles = withoutScripts.replaceAll(
-        RegExp(r'<style[^>]*>.*?</style>', dotAll: true, caseSensitive: false),
-        '');
-    return withoutStyles
-        .replaceAll(RegExp(r'<[^>]+>'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
+  Future<String?> _extractReadableTextFromUrl(String url) async {
+    final userScript = await _readabilityUserScriptFuture;
+    final completer = Completer<String?>();
+
+    late HeadlessInAppWebView headless;
+    headless = HeadlessInAppWebView(
+      initialSettings: InAppWebViewSettings(
+        javaScriptEnabled: true,
+        mediaPlaybackRequiresUserGesture: false,
+        clearCache: true,
+      ),
+      initialUserScripts: UnmodifiableListView<UserScript>([userScript]),
+      onWebViewCreated: (_) {},
+      onLoadStop: (controller, _) async {
+        try {
+          final text = await _extractReadableText(controller);
+          if (!completer.isCompleted) {
+            completer.complete(text);
+          }
+        } catch (_) {
+          if (!completer.isCompleted) {
+            completer.complete(null);
+          }
+        }
+      },
+      onReceivedError: (controller, request, error) {
+        if (!completer.isCompleted) {
+          completer.complete(null);
+        }
+      },
+    );
+
+    try {
+      await headless.run();
+      await headless.webViewController?.loadUrl(
+        urlRequest: URLRequest(url: WebUri(url)),
+      );
+      return await completer.future
+          .timeout(const Duration(seconds: 20), onTimeout: () => null);
+    } finally {
+      await headless.dispose();
+    }
+  }
+
+  Future<String?> _extractReadableText(
+      InAppWebViewController controller) async {
+    final raw = await controller.evaluateJavascript(
+      source: _readabilityExtractorJs,
+    );
+    final jsonStr = raw is String ? raw : raw?.toString();
+    if (jsonStr == null || jsonStr.isEmpty) {
+      return null;
+    }
+
+    final Map<String, dynamic> result = jsonDecode(jsonStr);
+    if (result['ok'] == true) {
+      var text = (result['text'] as String?);
+      if (text != null) {
+        text = normalize(text);
+      }
+      if (text != null && text.isNotEmpty) {
+        return text;
+      }
+    } else {
+      debugPrint('Readability failed: ${result['error']}');
+    }
+
+    return null;
+  }
+
+  String normalize(String s) {
+    return s
+        // NBSP を普通のスペースに
+        .replaceAll('\u00A0', ' ')
+        // 全角スペース
+        .replaceAll('\u3000', ' ')
+        // ゼロ幅文字
+        .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '')
+        // 連続する改行を1つに
+        .replaceAll(RegExp(r'\n\s*\n+'), '')
+        .replaceAll(RegExp(r'\t'), '')
         .trim();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _handleBack,
-        ),
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _setName,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
+    return FutureBuilder<UserScript>(
+      future: _readabilityUserScriptFuture,
+      builder: (context, snapshot) {
+        final body = (() {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasData) {
+            return _buildWebView(snapshot.data!);
+          }
+          return const Center(
+            child: Text('Readability の読み込みに失敗しました'),
+          );
+        })();
+
+        return Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: _handleBack,
             ),
-            IconButton(
-              tooltip: 'ニュースセット名を変更',
-              onPressed: _handleRename,
-              icon: const Icon(Icons.edit_outlined),
-            ),
-          ],
-        ),
-      ),
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: InAppWebView(
-              initialUrlRequest: URLRequest(
-                url: WebUri(widget.initialUrl.toString()),
-              ),
-              initialSettings: InAppWebViewSettings(
-                useHybridComposition: true,
-                mediaPlaybackRequiresUserGesture: false,
-              ),
-              onWebViewCreated: (controller) {
-                _webViewController = controller;
-              },
-              shouldOverrideUrlLoading: (controller, navigationAction) async {
-                final uri = navigationAction.request.url;
-                if (uri != null && navigationAction.isForMainFrame) {
-                  unawaited(_captureArticle(uri.toString()));
-                }
-                return NavigationActionPolicy.ALLOW;
-              },
-            ),
-          ),
-          Positioned(
-            left: 16,
-            bottom: 20,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            titleSpacing: 0,
+            title: Row(
               children: [
-                FilledButton.icon(
-                  icon: const Icon(Icons.tune),
-                  label: const Text('一括設定'),
-                  onPressed: _handleBulkAdd,
-                ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  icon: Icon(
-                    _isAddMode ? Icons.check_circle : Icons.add_circle,
+                Expanded(
+                  child: Text(
+                    _setName,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  label: Text(_isAddMode ? '追加モード ON' : 'ニュース追加モード'),
-                  onPressed: _toggleAddMode,
                 ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  icon: Icon(
-                    _isSpeaking ? Icons.volume_up : Icons.play_arrow,
-                  ),
-                  label: Text(_isSpeaking ? '再生中...' : 'TTS再生'),
-                  onPressed: _playCachedContent,
-                  // onPressed: _isSpeaking ? null : _playCachedContent,
+                IconButton(
+                  tooltip: 'ニュースセット名を変更',
+                  onPressed: _handleRename,
+                  icon: const Icon(Icons.edit_outlined),
                 ),
               ],
             ),
           ),
-        ],
-      ),
+          body: body,
+        );
+      },
+    );
+  }
+
+  Widget _buildWebView(UserScript readabilityScript) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: InAppWebView(
+            initialUrlRequest: URLRequest(
+              url: WebUri(widget.initialUrl.toString()),
+            ),
+            initialSettings: InAppWebViewSettings(
+              useHybridComposition: true,
+              mediaPlaybackRequiresUserGesture: false,
+              javaScriptEnabled: true,
+            ),
+            initialUserScripts:
+                UnmodifiableListView<UserScript>([readabilityScript]),
+            onWebViewCreated: (controller) {
+              _webViewController = controller;
+            },
+            shouldOverrideUrlLoading: (controller, navigationAction) async {
+              final uri = navigationAction.request.url;
+              if (_isAddMode &&
+                  uri != null &&
+                  navigationAction.isForMainFrame) {
+                unawaited(_captureArticle(uri.toString()));
+                return NavigationActionPolicy.CANCEL;
+              }
+              return NavigationActionPolicy.ALLOW;
+            },
+          ),
+        ),
+        Positioned(
+          left: 16,
+          bottom: 20,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FilledButton.icon(
+                icon: const Icon(Icons.tune),
+                label: const Text('一括設定'),
+                onPressed: _handleBulkAdd,
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                icon: Icon(
+                  _isAddMode ? Icons.check_circle : Icons.add_circle,
+                ),
+                label: Text(_isAddMode ? '追加モード ON' : 'ニュース追加モード'),
+                onPressed: _toggleAddMode,
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                icon: Icon(
+                  _isSpeaking ? Icons.volume_up : Icons.play_arrow,
+                ),
+                label: Text(_isSpeaking ? '再生中...' : 'TTS再生'),
+                onPressed: _isSpeaking ? null : _playCachedContent,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -315,3 +442,25 @@ class _CachedArticle {
   final String url;
   final String content;
 }
+
+const _readabilityExtractorJs = r'''
+(() => {
+  try {
+    if (typeof Readability === 'undefined') {
+      return JSON.stringify({ ok: false, error: 'Readability not found' });
+    }
+    const doc = document.cloneNode(true);
+    const article = new Readability(doc).parse();
+    if (!article || !article.textContent) {
+      return JSON.stringify({ ok: false, error: 'No article' });
+    }
+    return JSON.stringify({
+      ok: true,
+      title: article.title || '',
+      text: article.textContent || ''
+    });
+  } catch (e) {
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+})()
+''';

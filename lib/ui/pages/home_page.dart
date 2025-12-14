@@ -169,7 +169,7 @@ class _HomePageState extends State<HomePage> {
     switch (result.option) {
       case NewsSetAddOption.searchGoogle:
         final query = Uri.encodeQueryComponent(result.setName);
-        return Uri.parse('https://www.google.com/search?q=$query');
+        return Uri.parse('https://www.google.com/search?q=hoge');
       case NewsSetAddOption.googleNews:
         return Uri.parse('https://news.google.com/home?hl=ja&gl=JP&ceid=JP:ja');
       case NewsSetAddOption.customUrl:
@@ -177,8 +177,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  String _generateTempSetId() =>
-      'set-${DateTime.now().millisecondsSinceEpoch}';
+  String _generateTempSetId() => 'set-${DateTime.now().millisecondsSinceEpoch}';
 
   (String, DateTime, int) _buildDefaultSetNameSuggestion() {
     final now = DateTime.now();
