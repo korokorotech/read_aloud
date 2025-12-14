@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:read_aloud/ui/pages/news_set_create_modal.dart';
+import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
 
 class NewsSet {
   NewsSet({
@@ -160,8 +160,7 @@ class _HomePageState extends State<HomePage> {
     final isSameDay =
         _lastGeneratedDate != null && _isSameDate(_lastGeneratedDate!, today);
     final nextSequence = isSameDay ? _generatedCountForDay + 1 : 1;
-    final dateStr =
-        '${now.year}${_twoDigits(now.month)}${_twoDigits(now.day)}';
+    final dateStr = '${now.year}${_twoDigits(now.month)}${_twoDigits(now.day)}';
     final suffix = _twoDigits(nextSequence);
     return ('$dateStr-$suffix', today, nextSequence);
   }
