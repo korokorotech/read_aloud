@@ -1,18 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:read_aloud/entities/news_set_summary.dart';
+import 'package:read_aloud/repositories/news_set_repository.dart';
 import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
 import 'package:read_aloud/ui/routes/app_router.dart';
-
-class NewsSet {
-  NewsSet({
-    required this.name,
-    required this.articleCount,
-    required this.updatedAt,
-  });
-
-  final String name;
-  final int articleCount;
-  final DateTime updatedAt;
-}
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,26 +12,19 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<NewsSet> _savedSets = [
-    NewsSet(
-      name: '朝のながら聴き',
-      articleCount: 12,
-      updatedAt: DateTime.now().subtract(const Duration(minutes: 25)),
-    ),
-    NewsSet(
-      name: 'AIリサーチセット',
-      articleCount: 7,
-      updatedAt: DateTime.now().subtract(const Duration(hours: 5, minutes: 12)),
-    ),
-    NewsSet(
-      name: 'あとで読む（週末）',
-      articleCount: 23,
-      updatedAt: DateTime.now().subtract(const Duration(days: 1, hours: 2)),
-    ),
-  ];
+  final NewsSetRepository _newsSetRepository = NewsSetRepository();
+  List<NewsSetSummary> _newsSets = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
   DateTime? _lastGeneratedDate;
   int _generatedCountForDay = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNewsSets();
+  }
 
   Future<void> _handleCreateNewSet() async {
     final (initialName, suggestedDate, suggestedSequence) =
@@ -74,18 +57,20 @@ class _HomePageState extends State<HomePage> {
     }
 
     final tempSetId = _generateTempSetId();
-    context.goWebView(
+    await context.pushWebView(
       setId: tempSetId,
       setName: result.setName,
       initialUrl: initialUrl,
       openAddMode: result.option == NewsSetAddOption.customUrl,
     );
+    if (!mounted) return;
+    await _loadNewsSets(showSpinner: false);
   }
 
-  void _handleOpenSet(NewsSet set) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('"${set.name}" を開く想定です。')),
-    );
+  Future<void> _handleOpenSet(NewsSetSummary set) async {
+    await context.pushSetDetail(set.id);
+    if (!mounted) return;
+    await _loadNewsSets(showSpinner: false);
   }
 
   @override
@@ -118,20 +103,33 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 12),
               Expanded(
-                child: _savedSets.isEmpty
-                    ? const _EmptyState()
-                    : ListView.separated(
-                        itemCount: _savedSets.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final set = _savedSets[index];
-                          return _NewsSetCard(
-                            newsSet: set,
-                            subtitle:
-                                '${set.articleCount}件・最終更新 ${_formatUpdatedAt(set.updatedAt)}',
-                            onTap: () => _handleOpenSet(set),
-                          );
-                        },
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : RefreshIndicator(
+                        onRefresh: () => _loadNewsSets(showSpinner: false),
+                        child: _errorMessage != null
+                            ? _ErrorList(
+                                message: _errorMessage!,
+                                onRetry: () => _loadNewsSets(),
+                              )
+                            : _newsSets.isEmpty
+                                ? const _EmptyList()
+                                : ListView.separated(
+                                    physics:
+                                        const AlwaysScrollableScrollPhysics(),
+                                    itemCount: _newsSets.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: 12),
+                                    itemBuilder: (context, index) {
+                                      final set = _newsSets[index];
+                                      return _NewsSetCard(
+                                        newsSet: set,
+                                        subtitle:
+                                            '${set.articleCount}件・最終更新 ${_formatUpdatedAt(set.updatedAt)}',
+                                        onTap: () => _handleOpenSet(set),
+                                      );
+                                    },
+                                  ),
                       ),
               ),
             ],
@@ -145,7 +143,7 @@ class _HomePageState extends State<HomePage> {
           width: double.infinity,
           child: FilledButton.icon(
             icon: const Icon(Icons.add),
-            label: const Text('＋ 新規作成'),
+            label: const Text('新規作成'),
             onPressed: _handleCreateNewSet,
           ),
         ),
@@ -199,6 +197,31 @@ class _HomePageState extends State<HomePage> {
       a.year == b.year && a.month == b.month && a.day == b.day;
 
   String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+  Future<void> _loadNewsSets({bool showSpinner = true}) async {
+    if (showSpinner) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+
+    try {
+      final sets = await _newsSetRepository.fetchSummaries();
+      if (!mounted) return;
+      setState(() {
+        _newsSets = sets;
+        _isLoading = false;
+        _errorMessage = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'ニュースセットを取得できませんでした: $e';
+        _isLoading = false;
+      });
+    }
+  }
 }
 
 class _NewsSetCard extends StatelessWidget {
@@ -208,7 +231,7 @@ class _NewsSetCard extends StatelessWidget {
     required this.onTap,
   });
 
-  final NewsSet newsSet;
+  final NewsSetSummary newsSet;
   final String subtitle;
   final VoidCallback onTap;
 
@@ -296,6 +319,61 @@ class _EmptyState extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _EmptyList extends StatelessWidget {
+  const _EmptyList();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: const [
+        SizedBox(height: 60),
+        _EmptyState(),
+      ],
+    );
+  }
+}
+
+class _ErrorList extends StatelessWidget {
+  const _ErrorList({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 60),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline,
+                    color: Theme.of(context).colorScheme.error),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: onRetry,
+                  child: const Text('再読み込み'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

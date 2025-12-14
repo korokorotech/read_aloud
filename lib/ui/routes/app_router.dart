@@ -115,6 +115,11 @@ extension AppRouteNav on BuildContext {
   void goSetDetail(String setId) =>
       goNamed(RouteNames.newsSetDetailPage, pathParameters: {'setId': setId});
 
+  Future<T?> pushSetDetail<T>(String setId) => pushNamed<T>(
+        RouteNames.newsSetDetailPage,
+        pathParameters: {'setId': setId},
+      );
+
   void goWebView({
     required String setId,
     required String setName,
@@ -122,6 +127,23 @@ extension AppRouteNav on BuildContext {
     bool openAddMode = false,
   }) {
     goNamed(
+      RouteNames.webViewPage,
+      pathParameters: {'setId': setId},
+      extra: WebViewRouteArgs(
+        setName: setName,
+        initialUrl: initialUrl,
+        openAddMode: openAddMode,
+      ),
+    );
+  }
+
+  Future<T?> pushWebView<T>({
+    required String setId,
+    required String setName,
+    required Uri initialUrl,
+    bool openAddMode = false,
+  }) {
+    return pushNamed<T>(
       RouteNames.webViewPage,
       pathParameters: {'setId': setId},
       extra: WebViewRouteArgs(
