@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
+import 'package:read_aloud/ui/routes/app_router.dart';
 
 class NewsSet {
   NewsSet({
@@ -64,10 +65,20 @@ class _HomePageState extends State<HomePage> {
 
     _commitDefaultSetNameSuggestion(suggestedDate, suggestedSequence);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('「${result.setName}」を作成して次のフローに進む予定です。'),
-      ),
+    final initialUrl = _resolveInitialUrl(result);
+    if (initialUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('遷移先URLを決定できませんでした。')),
+      );
+      return;
+    }
+
+    final tempSetId = _generateTempSetId();
+    context.goWebView(
+      setId: tempSetId,
+      setName: result.setName,
+      initialUrl: initialUrl,
+      openAddMode: result.option == NewsSetAddOption.customUrl,
     );
   }
 
@@ -153,6 +164,21 @@ class _HomePageState extends State<HomePage> {
     return '${dateTime.year}/${_twoDigits(dateTime.month)}/${_twoDigits(dateTime.day)}'
         ' ${_twoDigits(dateTime.hour)}:${_twoDigits(dateTime.minute)}';
   }
+
+  Uri? _resolveInitialUrl(NewsSetCreateResult result) {
+    switch (result.option) {
+      case NewsSetAddOption.searchGoogle:
+        final query = Uri.encodeQueryComponent(result.setName);
+        return Uri.parse('https://www.google.com/search?q=$query');
+      case NewsSetAddOption.googleNews:
+        return Uri.parse('https://news.google.com/home?hl=ja&gl=JP&ceid=JP:ja');
+      case NewsSetAddOption.customUrl:
+        return result.customUrl;
+    }
+  }
+
+  String _generateTempSetId() =>
+      'set-${DateTime.now().millisecondsSinceEpoch}';
 
   (String, DateTime, int) _buildDefaultSetNameSuggestion() {
     final now = DateTime.now();

@@ -76,9 +76,13 @@ class AppRouter {
                       return const MaterialPage(child: HomePage());
                     }
 
+                    final setName =
+                        webArgs?.setName ?? 'セット $setId';
+
                     return MaterialPage(
                       child: WebViewPage(
                         setId: setId,
+                        setName: setName,
                         initialUrl: initialUrl,
                         openAddMode: webArgs?.openAddMode ?? false,
                       ),
@@ -113,6 +117,7 @@ extension AppRouteNav on BuildContext {
 
   void goWebView({
     required String setId,
+    required String setName,
     required Uri initialUrl,
     bool openAddMode = false,
   }) {
@@ -120,6 +125,7 @@ extension AppRouteNav on BuildContext {
       RouteNames.webViewPage,
       pathParameters: {'setId': setId},
       extra: WebViewRouteArgs(
+        setName: setName,
         initialUrl: initialUrl,
         openAddMode: openAddMode,
       ),
