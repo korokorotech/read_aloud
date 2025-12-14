@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 
 class WebViewPage extends StatefulWidget {
   const WebViewPage({
@@ -24,12 +28,46 @@ class _WebViewPageState extends State<WebViewPage> {
   late bool _isAddMode;
   late String _setName;
   InAppWebViewController? _webViewController;
+  final FlutterTts _flutterTts = FlutterTts();
+  final List<_CachedArticle> _cachedArticles = [];
+  bool _isSpeaking = false;
+  late final Future<void> _ttsInitFuture;
 
   @override
   void initState() {
     super.initState();
     _isAddMode = widget.openAddMode;
     _setName = widget.setName;
+    _ttsInitFuture = _setupTts();
+  }
+
+  @override
+  void dispose() {
+    _flutterTts.stop();
+    super.dispose();
+  }
+
+  Future<void> _setupTts() async {
+    // await _flutterTts.setSharedInstance(true);
+
+    print("TEST_D 11 ${await _flutterTts.getDefaultEngine}");
+    print("TEST_D 12 ${await _flutterTts.getDefaultVoice}");
+
+    await _flutterTts.setLanguage('ja-JP');
+    await _flutterTts.setSpeechRate(1);
+    await _flutterTts.awaitSpeakCompletion(true);
+    _flutterTts.setCompletionHandler(() {
+      if (!mounted) return;
+      setState(() {
+        _isSpeaking = false;
+      });
+    });
+    _flutterTts.setErrorHandler((msg) {
+      if (!mounted) return;
+      setState(() {
+        _isSpeaking = false;
+      });
+    });
   }
 
   void _handleBack() {
@@ -121,6 +159,70 @@ class _WebViewPageState extends State<WebViewPage> {
       );
   }
 
+  Future<void> _captureArticle(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      final response = await http.get(uri);
+      if (response.statusCode != 200) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('取得に失敗しました: $url')),
+        );
+        return;
+      }
+
+      final content = _stripHtml(response.body);
+      if (!mounted) return;
+      setState(() {
+        _cachedArticles
+            .add(_CachedArticle(url: uri.toString(), content: content));
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('記事を保存しました (${_cachedArticles.length}件)')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('記事取得エラー: $e')),
+      );
+    }
+  }
+
+  Future<void> _playCachedContent() async {
+    try {
+      await _ttsInitFuture;
+      await _flutterTts.stop();
+      await _flutterTts.setPitch(1);
+      setState(() {
+        _isSpeaking = true;
+      });
+      await _flutterTts.speak('はむこ、はむころ、ハムスター');
+      await _flutterTts.stop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSpeaking = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('TTSエラー: $e')),
+      );
+    }
+  }
+
+  String _stripHtml(String html) {
+    final withoutScripts = html.replaceAll(
+        RegExp(r'<script[^>]*>.*?</script>',
+            dotAll: true, caseSensitive: false),
+        '');
+    final withoutStyles = withoutScripts.replaceAll(
+        RegExp(r'<style[^>]*>.*?</style>', dotAll: true, caseSensitive: false),
+        '');
+    return withoutStyles
+        .replaceAll(RegExp(r'<[^>]+>'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -161,6 +263,13 @@ class _WebViewPageState extends State<WebViewPage> {
               onWebViewCreated: (controller) {
                 _webViewController = controller;
               },
+              shouldOverrideUrlLoading: (controller, navigationAction) async {
+                final uri = navigationAction.request.url;
+                if (uri != null && navigationAction.isForMainFrame) {
+                  unawaited(_captureArticle(uri.toString()));
+                }
+                return NavigationActionPolicy.ALLOW;
+              },
             ),
           ),
           Positioned(
@@ -182,6 +291,15 @@ class _WebViewPageState extends State<WebViewPage> {
                   label: Text(_isAddMode ? '追加モード ON' : 'ニュース追加モード'),
                   onPressed: _toggleAddMode,
                 ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  icon: Icon(
+                    _isSpeaking ? Icons.volume_up : Icons.play_arrow,
+                  ),
+                  label: Text(_isSpeaking ? '再生中...' : 'TTS再生'),
+                  onPressed: _playCachedContent,
+                  // onPressed: _isSpeaking ? null : _playCachedContent,
+                ),
               ],
             ),
           ),
@@ -189,4 +307,11 @@ class _WebViewPageState extends State<WebViewPage> {
       ),
     );
   }
+}
+
+class _CachedArticle {
+  _CachedArticle({required this.url, required this.content});
+
+  final String url;
+  final String content;
 }
