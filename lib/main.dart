@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:read_aloud/ui/pages/home_page.dart';
+import 'package:read_aloud/ui/routes/app_router.dart';
 
 void main() {
   runApp(const ReadAloudApp());
@@ -8,9 +8,11 @@ void main() {
 class ReadAloudApp extends StatelessWidget {
   const ReadAloudApp({super.key});
 
+  static final _router = AppRouter.create();
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Read Aloud',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -25,7 +27,7 @@ class ReadAloudApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const HomePage(),
+      routerConfig: _router,
     );
   }
 }
