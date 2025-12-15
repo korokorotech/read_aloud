@@ -6,6 +6,7 @@ import 'package:read_aloud/entities/news_set_detail.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
 import 'package:read_aloud/services/player_service.dart';
 import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
+import 'package:read_aloud/ui/pages/article_web_view_page.dart';
 import 'package:read_aloud/ui/routes/app_router.dart';
 import 'package:read_aloud/ui/widgets/snack_bar_helper.dart';
 
@@ -126,6 +127,7 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
             isCurrent: isCurrent,
             onTap: () =>
                 unawaited(_player.startWithDetail(detail, startIndex: i)),
+            onOpenUrl: () => _openNewsItemUrl(item),
           ),
         );
         children.add(const SizedBox(height: 12));
@@ -175,6 +177,31 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
     );
     if (!mounted) return;
     await _loadDetail(showSpinner: false);
+  }
+
+  Future<void> _openNewsItemUrl(NewsItemRecord item) async {
+    final uri = Uri.tryParse(item.url);
+    if (uri == null) {
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: '記事のURLが不正です。',
+      );
+      return;
+    }
+
+    final title = item.previewText.trim().isEmpty
+        ? _extractDomain(item.url)
+        : item.previewText;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArticleWebViewPage(
+          initialUrl: uri,
+          title: title,
+        ),
+      ),
+    );
   }
 
   Future<void> _loadDetail({bool showSpinner = true}) async {
@@ -376,6 +403,7 @@ class _NewsItemCard extends StatelessWidget {
     required this.addedLabel,
     this.isCurrent = false,
     this.onTap,
+    this.onOpenUrl,
   });
 
   final NewsItemRecord item;
@@ -383,6 +411,7 @@ class _NewsItemCard extends StatelessWidget {
   final String addedLabel;
   final bool isCurrent;
   final VoidCallback? onTap;
+  final VoidCallback? onOpenUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -426,6 +455,17 @@ class _NewsItemCard extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              ],
+              if (onOpenUrl != null) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('記事を開く'),
+                    onPressed: onOpenUrl,
+                  ),
                 ),
               ],
             ],
