@@ -45,10 +45,22 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   Future<UserScript> _loadReadabilityUserScript() async {
-    final source = await rootBundle.loadString('assets/js/Readability.js');
+    final src = await rootBundle.loadString('assets/js/Readability.js');
+
+    // ★ Readability がモジュール/スコープ内でも window に生やす
+    final patched = '''
+$src
+try {
+  if (typeof Readability !== 'undefined') {
+    window.Readability = Readability;
+  }
+} catch (e) {}
+''';
+
     return UserScript(
-      source: source,
-      injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
+      source: patched,
+      injectionTime:
+          UserScriptInjectionTime.AT_DOCUMENT_START, // ★START寄りが安定しやすい
     );
   }
 
@@ -138,9 +150,7 @@ class _WebViewPageState extends State<WebViewPage> {
 
     showAutoHideSnackBar(
       context,
-      message: _isAddMode
-          ? 'ニュース追加モードをオンにしました。'
-          : 'ニュース追加モードをオフにしました。',
+      message: _isAddMode ? 'ニュース追加モードをオンにしました。' : 'ニュース追加モードをオフにしました。',
       duration: const Duration(seconds: 3),
       action: SnackBarAction(
         label: 'OK',
@@ -245,30 +255,56 @@ class _WebViewPageState extends State<WebViewPage> {
     final completer = Completer<_ExtractedArticle?>();
 
     late HeadlessInAppWebView headless;
+
+    // 状態管理：最初のページか / 元記事ロード後か
+    var redirectedToSource = false;
+
     headless = HeadlessInAppWebView(
       initialSettings: InAppWebViewSettings(
         javaScriptEnabled: true,
         mediaPlaybackRequiresUserGesture: false,
         clearCache: true,
+        userAgent:
+            'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
       ),
       initialUserScripts: UnmodifiableListView<UserScript>([userScript]),
       onWebViewCreated: (_) {},
-      onLoadStop: (controller, _) async {
+      onLoadStop: (controller, loadedUrl) async {
+        if (completer.isCompleted) return;
+
         try {
+          // 遅延レンダリング対策で少し待つ（サイトによっては必須）
+          await Future.delayed(const Duration(milliseconds: 800));
+
+          final current =
+              loadedUrl != null ? Uri.tryParse(loadedUrl.toString()) : null;
+
+          // 1) Googleニュースの /read/ なら元記事へ解決して開き直す（1回だけ）
+          if (!redirectedToSource &&
+              current != null &&
+              _isGoogleNewsReadUrl(current)) {
+            final resolved = await _resolveGoogleNewsToSourceUrl(controller);
+            if (resolved != null) {
+              redirectedToSource = true;
+              await controller.loadUrl(
+                  urlRequest: URLRequest(url: WebUri(resolved)));
+              return; // 次の onLoadStop で Readability
+            } else {
+              // 解決できない場合はそのまま Readability を試す（落ちるかもしれないが）
+              redirectedToSource = true;
+            }
+          }
+
+          // 2) Readability で本文抽出
           final article = await _extractReadableArticle(controller);
-          if (!completer.isCompleted) {
-            completer.complete(article);
-          }
+          if (!completer.isCompleted) completer.complete(article);
         } catch (_) {
-          if (!completer.isCompleted) {
-            completer.complete(null);
-          }
+          if (!completer.isCompleted) completer.complete(null);
         }
       },
       onReceivedError: (controller, request, error) {
-        if (!completer.isCompleted) {
-          completer.complete(null);
-        }
+        if (!completer.isCompleted) completer.complete(null);
       },
     );
 
@@ -278,7 +314,7 @@ class _WebViewPageState extends State<WebViewPage> {
         urlRequest: URLRequest(url: WebUri(url)),
       );
       return await completer.future
-          .timeout(const Duration(seconds: 20), onTimeout: () => null);
+          .timeout(const Duration(seconds: 25), onTimeout: () => null);
     } finally {
       await headless.dispose();
     }
@@ -505,6 +541,22 @@ class _WebViewPageState extends State<WebViewPage> {
       ],
     );
   }
+
+  Future<String?> _resolveGoogleNewsToSourceUrl(
+      InAppWebViewController controller) async {
+    final raw = await controller.evaluateJavascript(
+        source: _extractCanonicalOrOutboundJs);
+    final jsonStr = raw is String ? raw : raw?.toString();
+    if (jsonStr == null || jsonStr.isEmpty) return null;
+
+    final map = jsonDecode(jsonStr) as Map<String, dynamic>;
+    if (map['ok'] == true) {
+      final s = map['url'] as String?;
+      if (s == null || s.isEmpty) return null;
+      return s;
+    }
+    return null;
+  }
 }
 
 class _ExtractedArticle {
@@ -530,6 +582,46 @@ const _readabilityExtractorJs = r'''
       title: article.title || '',
       text: article.textContent || ''
     });
+  } catch (e) {
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+})()
+''';
+
+bool _isGoogleNewsReadUrl(Uri uri) {
+  final host = uri.host.toLowerCase();
+  return host == 'news.google.com' && uri.path.startsWith('/read/');
+}
+
+const _extractCanonicalOrOutboundJs = r'''
+(() => {
+  try {
+    // 1) canonical を優先
+    const canonical = document.querySelector('link[rel="canonical"]')?.href;
+    if (canonical && canonical.startsWith('http')) {
+      return JSON.stringify({ ok: true, url: canonical, how: 'canonical' });
+    }
+
+    // 2) 外部リンク（元記事っぽいもの）を探す
+    const urls = Array.from(document.querySelectorAll('a[href]'))
+      .map(a => a.href)
+      .filter(h => typeof h === 'string' && h.startsWith('http'));
+
+    // Google内部/ニュース内部を除外して外部っぽいのを優先
+    const filtered = urls.filter(h => {
+      const u = new URL(h);
+      const host = u.host.toLowerCase();
+      if (host === 'news.google.com') return false;
+      if (host.endsWith('.google.com')) return false;
+      if (host === 'accounts.google.com') return false;
+      if (host === 'myaccount.google.com') return false;
+      return true;
+    });
+
+    if (filtered.length > 0) {
+      return JSON.stringify({ ok: true, url: filtered[0], how: 'outbound' });
+    }
+    return JSON.stringify({ ok: false, error: 'no canonical/outbound' });
   } catch (e) {
     return JSON.stringify({ ok: false, error: String(e) });
   }
