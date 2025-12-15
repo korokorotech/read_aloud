@@ -50,7 +50,7 @@ class _HomePageState extends State<HomePage> {
 
     _commitDefaultSetNameSuggestion(suggestedDate, suggestedSequence);
 
-    final initialUrl = _resolveInitialUrl(result);
+    final initialUrl = resolveInitialUrlForNewsSet(result);
     if (initialUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('遷移先URLを決定できませんでした。')),
@@ -195,18 +195,6 @@ class _HomePageState extends State<HomePage> {
 
     return '${dateTime.year}/${_twoDigits(dateTime.month)}/${_twoDigits(dateTime.day)}'
         ' ${_twoDigits(dateTime.hour)}:${_twoDigits(dateTime.minute)}';
-  }
-
-  Uri? _resolveInitialUrl(NewsSetCreateResult result) {
-    switch (result.option) {
-      case NewsSetAddOption.searchGoogle:
-        final query = Uri.encodeQueryComponent(result.setName);
-        return Uri.parse('https://www.google.com/search?q=hoge');
-      case NewsSetAddOption.googleNews:
-        return Uri.parse('https://news.google.com/home?hl=ja&gl=JP&ceid=JP:ja');
-      case NewsSetAddOption.customUrl:
-        return result.customUrl;
-    }
   }
 
   String _generateTempSetId() => 'set-${DateTime.now().millisecondsSinceEpoch}';

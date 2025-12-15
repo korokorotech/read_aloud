@@ -5,6 +5,7 @@ import 'package:read_aloud/entities/news_item_record.dart';
 import 'package:read_aloud/entities/news_set_detail.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
 import 'package:read_aloud/services/player_service.dart';
+import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
 import 'package:read_aloud/ui/routes/app_router.dart';
 
 class NewsSetDetailPage extends StatefulWidget {
@@ -141,13 +142,34 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
   }
 
   Future<void> _openWebViewForSet(NewsSetDetail detail) async {
-    final uri =
-        Uri.parse('https://news.google.com/home?hl=ja&gl=JP&ceid=JP:ja');
+    final result = await showModalBottomSheet<NewsSetCreateResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => NewsSetCreateModal(
+        initialName: detail.name,
+        isNameEditable: false,
+        title: 'ニュースセットに追加',
+      ),
+    );
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    final initialUrl = resolveInitialUrlForNewsSet(result);
+    if (initialUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('遷移先URLを決定できませんでした。')),
+      );
+      return;
+    }
+
     await context.pushWebView(
       setId: detail.id,
-      setName: detail.name,
-      initialUrl: uri,
-      openAddMode: false,
+      setName: result.setName,
+      initialUrl: initialUrl,
+      openAddMode: result.option == NewsSetAddOption.customUrl,
     );
     if (!mounted) return;
     await _loadDetail(showSpinner: false);

@@ -30,6 +30,18 @@ extension NewsSetAddOptionLabel on NewsSetAddOption {
   }
 }
 
+Uri? resolveInitialUrlForNewsSet(NewsSetCreateResult result) {
+  switch (result.option) {
+    case NewsSetAddOption.searchGoogle:
+      final query = Uri.encodeQueryComponent(result.setName);
+      return Uri.parse('https://www.google.com/search?q=$query');
+    case NewsSetAddOption.googleNews:
+      return Uri.parse('https://news.google.com/home?hl=ja&gl=JP&ceid=JP:ja');
+    case NewsSetAddOption.customUrl:
+      return result.customUrl;
+  }
+}
+
 class NewsSetCreateResult {
   const NewsSetCreateResult({
     required this.setName,
@@ -46,9 +58,13 @@ class NewsSetCreateModal extends StatefulWidget {
   const NewsSetCreateModal({
     super.key,
     required this.initialName,
+    this.isNameEditable = true,
+    this.title,
   });
 
   final String initialName;
+  final bool isNameEditable;
+  final String? title;
 
   @override
   State<NewsSetCreateModal> createState() => _NewsSetCreateModalState();
@@ -111,6 +127,7 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
   Widget build(BuildContext context) {
     final padding = MediaQuery.of(context).viewInsets +
         const EdgeInsets.symmetric(horizontal: 24, vertical: 24);
+    final modalTitle = widget.title ?? 'ニュースセット新規作成';
 
     return SafeArea(
       child: Padding(
@@ -121,7 +138,7 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'ニュースセット新規作成',
+                modalTitle,
                 style: Theme.of(context)
                     .textTheme
                     .titleLarge
@@ -134,7 +151,10 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
                   labelText: 'ニュースセット名',
                   border: OutlineInputBorder(),
                 ),
-                onChanged: (_) => setState(() {}),
+                readOnly: !widget.isNameEditable,
+                enabled: widget.isNameEditable,
+                onChanged:
+                    widget.isNameEditable ? (_) => setState(() {}) : null,
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<NewsSetAddOption>(
