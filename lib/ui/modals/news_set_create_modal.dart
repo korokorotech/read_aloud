@@ -10,9 +10,9 @@ extension NewsSetAddOptionLabel on NewsSetAddOption {
   String get label {
     switch (this) {
       case NewsSetAddOption.searchGoogle:
-        return '検索して追加（Google検索）';
+        return '検索して追加';
       case NewsSetAddOption.googleNews:
-        return 'ニュースから追加（Googleニュース）';
+        return 'ニュースから追加';
       case NewsSetAddOption.customUrl:
         return 'その他のサイトから追加';
     }
@@ -21,9 +21,9 @@ extension NewsSetAddOptionLabel on NewsSetAddOption {
   String get description {
     switch (this) {
       case NewsSetAddOption.searchGoogle:
-        return 'Google検索へ遷移します';
+        return '検索へ遷移します';
       case NewsSetAddOption.googleNews:
-        return 'Googleニュースへ遷移します';
+        return 'ニュース検索へ遷移します';
       case NewsSetAddOption.customUrl:
         return 'URLを入力して任意のサイトへ遷移します';
     }
@@ -158,7 +158,7 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<NewsSetAddOption>(
-                value: _selectedOption,
+                initialValue: _selectedOption,
                 isExpanded: true,
                 items: NewsSetAddOption.values
                     .map(

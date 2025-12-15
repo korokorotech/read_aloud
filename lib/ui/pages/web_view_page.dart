@@ -8,6 +8,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:go_router/go_router.dart';
 import 'package:read_aloud/entities/news_item_record.dart';
 import 'package:read_aloud/repositories/news_item_repository.dart';
+import 'package:read_aloud/ui/widgets/snack_bar_helper.dart';
 
 class WebViewPage extends StatefulWidget {
   const WebViewPage({
@@ -118,8 +119,9 @@ class _WebViewPageState extends State<WebViewPage> {
           FilledButton(
             onPressed: () {
               Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('リンクを一括追加しました（モック）。')),
+              showAutoHideSnackBar(
+                context,
+                message: 'リンクを一括追加しました（モック）。',
               );
             },
             child: const Text('OK'),
@@ -134,37 +136,34 @@ class _WebViewPageState extends State<WebViewPage> {
       _isAddMode = !_isAddMode;
     });
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            _isAddMode ? 'ニュース追加モードをオンにしました。' : 'ニュース追加モードをオフにしました。',
-          ),
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'OK',
-            onPressed: ScaffoldMessenger.of(context).hideCurrentSnackBar,
-          ),
-        ),
-      );
+    showAutoHideSnackBar(
+      context,
+      message: _isAddMode
+          ? 'ニュース追加モードをオンにしました。'
+          : 'ニュース追加モードをオフにしました。',
+      duration: const Duration(seconds: 3),
+      action: SnackBarAction(
+        label: 'OK',
+        onPressed: ScaffoldMessenger.of(context).hideCurrentSnackBar,
+      ),
+    );
   }
 
   Future<void> _captureArticle(String url) async {
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text('本文を解析中です: $url')),
-      );
+    showAutoHideSnackBar(
+      context,
+      message: '本文を解析中です: $url',
+    );
 
     try {
       final article = await _extractArticleFromUrl(url);
       if (!mounted) return;
 
       if (article == null || article.content.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('本文を取得できませんでした: $url')),
+        showAutoHideSnackBar(
+          context,
+          message: '本文を取得できませんでした: $url',
         );
         return;
       }
@@ -182,46 +181,46 @@ class _WebViewPageState extends State<WebViewPage> {
       _showAddedSnackBar(saved);
     } on DuplicateArticleException {
       if (!mounted) return;
-      messenger.hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('このURLは既にセットに追加されています。')),
+      showAutoHideSnackBar(
+        context,
+        message: 'このURLは既にセットに追加されています。',
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('記事取得エラー: $e')),
+      showAutoHideSnackBar(
+        context,
+        message: '記事取得エラー: $e',
       );
     }
   }
 
   void _showAddedSnackBar(NewsItemRecord item) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: const Text('キューに追加しました'),
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'もとに戻す',
-            onPressed: () {
-              unawaited(_undoInsert(item));
-            },
-          ),
-        ),
-      );
+    showAutoHideSnackBar(
+      context,
+      message: 'キューに追加しました',
+      duration: const Duration(seconds: 3),
+      action: SnackBarAction(
+        label: 'もとに戻す',
+        onPressed: () {
+          unawaited(_undoInsert(item));
+        },
+      ),
+    );
   }
 
   Future<void> _undoInsert(NewsItemRecord item) async {
     try {
       await _newsItemRepository.deleteArticle(item.id);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('直前の追加を取り消しました。')),
+      showAutoHideSnackBar(
+        context,
+        message: '直前の追加を取り消しました。',
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('取り消しに失敗しました: $e')),
+      showAutoHideSnackBar(
+        context,
+        message: '取り消しに失敗しました: $e',
       );
     }
   }

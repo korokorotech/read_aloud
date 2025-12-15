@@ -7,6 +7,7 @@ import 'package:read_aloud/repositories/news_set_repository.dart';
 import 'package:read_aloud/services/player_service.dart';
 import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
 import 'package:read_aloud/ui/routes/app_router.dart';
+import 'package:read_aloud/ui/widgets/snack_bar_helper.dart';
 
 class NewsSetDetailPage extends StatefulWidget {
   const NewsSetDetailPage({
@@ -159,8 +160,9 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
 
     final initialUrl = resolveInitialUrlForNewsSet(result);
     if (initialUrl == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('遷移先URLを決定できませんでした。')),
+      showAutoHideSnackBar(
+        context,
+        message: '遷移先URLを決定できませんでした。',
       );
       return;
     }

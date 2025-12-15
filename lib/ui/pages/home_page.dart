@@ -4,6 +4,7 @@ import 'package:read_aloud/repositories/news_set_repository.dart';
 import 'package:read_aloud/services/player_service.dart';
 import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
 import 'package:read_aloud/ui/routes/app_router.dart';
+import 'package:read_aloud/ui/widgets/snack_bar_helper.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -52,8 +53,9 @@ class _HomePageState extends State<HomePage> {
 
     final initialUrl = resolveInitialUrlForNewsSet(result);
     if (initialUrl == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('遷移先URLを決定できませんでした。')),
+      showAutoHideSnackBar(
+        context,
+        message: '遷移先URLを決定できませんでした。',
       );
       return;
     }
@@ -79,14 +81,17 @@ class _HomePageState extends State<HomePage> {
     final success =
         await _player.startSetById(set.id, fallbackSetName: set.name);
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
     if (success) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('"${set.name}" の再生を開始しました。')),
+      showAutoHideSnackBar(
+        context,
+        message: '"${set.name}" の再生を開始しました。',
       );
     } else {
       final message = _player.errorMessage ?? '再生できませんでした。';
-      messenger.showSnackBar(SnackBar(content: Text(message)));
+      showAutoHideSnackBar(
+        context,
+        message: message,
+      );
     }
   }
 
@@ -99,8 +104,9 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('設定画面はまだありません。')),
+              showAutoHideSnackBar(
+                context,
+                message: '設定画面はまだありません。',
               );
             },
           ),
