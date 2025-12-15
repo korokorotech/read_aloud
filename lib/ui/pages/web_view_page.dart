@@ -51,7 +51,9 @@ class _WebViewPageState extends State<WebViewPage> {
 
   @override
   void dispose() {
-    _flutterTts.stop();
+    if (_isSpeaking) {
+      _flutterTts.stop();
+    }
     super.dispose();
   }
 
