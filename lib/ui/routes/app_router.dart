@@ -49,12 +49,8 @@ class AppRouter {
               path: 'sets/:setId', // ← home配下の相対パスでもOK
               pageBuilder: (context, state) {
                 final setId = state.pathParameters['setId']!;
-                final autoPlay = state.uri.queryParameters['autoPlay'] == '1';
                 return MaterialPage(
-                  child: NewsSetDetailPage(
-                    setId: setId,
-                    autoStartPlayback: autoPlay,
-                  ),
+                  child: NewsSetDetailPage(setId: setId),
                 );
               },
               routes: [
@@ -115,17 +111,12 @@ class AppRouter {
 extension AppRouteNav on BuildContext {
   void goHome() => goNamed(RouteNames.homePage);
 
-  // void goSetDetail(String setId, {bool autoPlay = false}) => goNamed(
-  //       RouteNames.newsSetDetailPage,
-  //       pathParameters: {'setId': setId},
-  //       queryParameters: autoPlay ? {'autoPlay': '1'} : null,
-  //     );
+  void goSetDetail(String setId) =>
+      goNamed(RouteNames.newsSetDetailPage, pathParameters: {'setId': setId});
 
-  Future<T?> pushSetDetail<T>(String setId, {bool autoPlay = false}) =>
-      pushNamed<T>(
+  Future<T?> pushSetDetail<T>(String setId) => pushNamed<T>(
         RouteNames.newsSetDetailPage,
         pathParameters: {'setId': setId},
-        queryParameters: autoPlay ? {'autoPlay': '1'} : {},
       );
 
   void goWebView({

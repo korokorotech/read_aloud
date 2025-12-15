@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:read_aloud/entities/news_set_summary.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
+import 'package:read_aloud/services/player_service.dart';
 import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
 import 'package:read_aloud/ui/routes/app_router.dart';
 
@@ -13,6 +14,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final NewsSetRepository _newsSetRepository = NewsSetRepository();
+  final PlayerService _player = PlayerService.instance;
   List<NewsSetSummary> _newsSets = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -74,9 +76,18 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _handlePlaySet(NewsSetSummary set) async {
-    await context.pushSetDetail(set.id, autoPlay: true);
+    final success =
+        await _player.startSetById(set.id, fallbackSetName: set.name);
     if (!mounted) return;
-    await _loadNewsSets(showSpinner: false);
+    final messenger = ScaffoldMessenger.of(context);
+    if (success) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('"${set.name}" の再生を開始しました。')),
+      );
+    } else {
+      final message = _player.errorMessage ?? '再生できませんでした。';
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   @override
@@ -120,20 +131,36 @@ class _HomePageState extends State<HomePage> {
                               )
                             : _newsSets.isEmpty
                                 ? const _EmptyList()
-                                : ListView.separated(
-                                    physics:
-                                        const AlwaysScrollableScrollPhysics(),
-                                    itemCount: _newsSets.length,
-                                    separatorBuilder: (_, __) =>
-                                        const SizedBox(height: 12),
-                                    itemBuilder: (context, index) {
-                                      final set = _newsSets[index];
-                                      return _NewsSetCard(
-                                        newsSet: set,
-                                        subtitle:
-                                            '${set.articleCount}件・最終更新 ${_formatUpdatedAt(set.updatedAt)}',
-                                        onTap: () => _handleOpenSet(set),
-                                        onPlay: () => _handlePlaySet(set),
+                                : AnimatedBuilder(
+                                    animation: _player,
+                                    builder: (context, _) {
+                                      return ListView.separated(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        itemCount: _newsSets.length,
+                                        separatorBuilder: (_, __) =>
+                                            const SizedBox(height: 12),
+                                        itemBuilder: (context, index) {
+                                          final set = _newsSets[index];
+                                          final isActive =
+                                              _player.currentSetId == set.id;
+                                          final isPlaying =
+                                              isActive && _player.isPlaying;
+                                          final isLoadingPlayer =
+                                              isActive && _player.isLoading;
+                                          return _NewsSetCard(
+                                            newsSet: set,
+                                            subtitle:
+                                                '${set.articleCount}件・最終更新 ${_formatUpdatedAt(set.updatedAt)}',
+                                            onTap: () => _handleOpenSet(set),
+                                            onPlay: () => _handlePlaySet(set),
+                                            onTogglePlay:
+                                                _player.togglePlayPause,
+                                            isActive: isActive,
+                                            isPlaying: isPlaying,
+                                            isLoading: isLoadingPlayer,
+                                          );
+                                        },
                                       );
                                     },
                                   ),
@@ -237,12 +264,20 @@ class _NewsSetCard extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
     required this.onPlay,
+    required this.onTogglePlay,
+    required this.isActive,
+    required this.isPlaying,
+    required this.isLoading,
   });
 
   final NewsSetSummary newsSet;
   final String subtitle;
   final VoidCallback onTap;
   final VoidCallback onPlay;
+  final VoidCallback onTogglePlay;
+  final bool isActive;
+  final bool isPlaying;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -290,9 +325,15 @@ class _NewsSetCard extends StatelessWidget {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: FilledButton.icon(
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('再生'),
-                        onPressed: onPlay,
+                        icon: isActive && isPlaying
+                            ? const Icon(Icons.pause)
+                            : const Icon(Icons.play_arrow),
+                        label: Text(isActive
+                            ? (isPlaying ? '一時停止' : '再生再開')
+                            : '再生'),
+                        onPressed: isLoading
+                            ? null
+                            : (isActive ? onTogglePlay : onPlay),
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
