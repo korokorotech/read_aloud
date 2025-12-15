@@ -517,18 +517,16 @@ class _WebViewPageState extends State<WebViewPage> {
             children: [
               if (_showActionMenu) _buildActionMenu(),
               if (_showActionMenu) const SizedBox(height: 12),
-              FloatingActionButton.small(
-                heroTag: 'webview-settings',
+              _ActionButton(
+                icon: Icons.settings,
                 tooltip: 'その他の操作',
-                onPressed: _toggleActionMenu,
-                child: const Icon(Icons.settings),
+                onTap: _toggleActionMenu,
               ),
               const SizedBox(height: 12),
-              FloatingActionButton(
-                heroTag: 'webview-add-current',
+              _ActionButton(
+                icon: Icons.add,
                 tooltip: '現在のページを追加',
-                onPressed: _handleAddCurrentPage,
-                child: const Icon(Icons.add),
+                onTap: _handleAddCurrentPage,
               ),
             ],
           ),
@@ -542,9 +540,10 @@ class _WebViewPageState extends State<WebViewPage> {
         _isAddMode ? 'リンクタップで追加オフ' : 'リンクタップで追加オン';
     final toggleIcon = _isAddMode ? Icons.link_off : Icons.link;
     return Material(
-      elevation: 6,
+      elevation: 2,
       borderRadius: BorderRadius.circular(16),
       color: Theme.of(context).colorScheme.surface,
+      shadowColor: Colors.black12,
       child: SizedBox(
         width: 220,
         child: Padding(
@@ -582,6 +581,47 @@ class _ExtractedArticle {
 
   final String? title;
   final String content;
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      elevation: 1.2,
+      shadowColor: Colors.black12,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      color: theme.colorScheme.primaryContainer,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Tooltip(
+              message: tooltip,
+              child: Icon(
+                icon,
+                size: 20,
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 const _readabilityExtractorJs = r'''
