@@ -132,11 +132,65 @@ class _WebViewPageState extends State<WebViewPage> {
     );
   }
 
-  void _handleAddCurrentPage() {
+  Future<void> _handleAddCurrentPage() async {
+    final controller = _webViewController;
+    if (controller == null) {
+      showAutoHideSnackBar(
+        context,
+        message: 'WebView の準備ができていません。',
+      );
+      return;
+    }
+    final currentUrl = await controller.getUrl();
+    final urlStr = currentUrl?.toString();
+    if (urlStr == null || urlStr.isEmpty) {
+      showAutoHideSnackBar(
+        context,
+        message: '現在のページのURLを取得できませんでした。',
+      );
+      return;
+    }
+    final normalizedUrl = _normalizeUrl(urlStr) ?? urlStr;
+
+    if (_showActionMenu) {
+      setState(() {
+        _showActionMenu = false;
+      });
+    }
+
+    if (!mounted) return;
     showAutoHideSnackBar(
       context,
-      message: '現在のページを追加する機能は準備中です。',
+      message: '現在のページを解析中です: $normalizedUrl',
     );
+
+    try {
+      final article = await _extractReadableArticle(controller);
+      if (!mounted) return;
+      if (article == null || article.content.isEmpty) {
+        showAutoHideSnackBar(
+          context,
+          message: '本文を取得できませんでした: $normalizedUrl',
+        );
+        return;
+      }
+
+      final saved = await _saveExtractedArticle(normalizedUrl, article);
+      if (!mounted) return;
+      _showAddedSnackBar(saved);
+    } on DuplicateArticleException {
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: 'このURLは既にセットに追加されています。',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: '記事取得エラー: $e',
+      );
+    }
   }
 
   void _toggleActionMenu() {
@@ -194,14 +248,7 @@ class _WebViewPageState extends State<WebViewPage> {
         return;
       }
 
-      final preview = _buildPreviewText(article);
-      final saved = await _newsItemRepository.insertArticle(
-        setId: widget.setId,
-        setName: _setName,
-        url: url,
-        previewText: preview,
-        articleText: article.content,
-      );
+      final saved = await _saveExtractedArticle(url, article);
 
       if (!mounted) return;
       _showAddedSnackBar(saved);
@@ -264,6 +311,20 @@ class _WebViewPageState extends State<WebViewPage> {
 
     const maxLength = 80;
     return body.length <= maxLength ? body : '${body.substring(0, maxLength)}…';
+  }
+
+  Future<NewsItemRecord> _saveExtractedArticle(
+    String url,
+    _ExtractedArticle article,
+  ) {
+    final preview = _buildPreviewText(article);
+    return _newsItemRepository.insertArticle(
+      setId: widget.setId,
+      setName: _setName,
+      url: url,
+      previewText: preview,
+      articleText: article.content,
+    );
   }
 
   Future<_ExtractedArticle?> _extractArticleFromUrl(String url) async {
@@ -526,7 +587,9 @@ class _WebViewPageState extends State<WebViewPage> {
               _ActionButton(
                 icon: Icons.add,
                 tooltip: '現在のページを追加',
-                onTap: _handleAddCurrentPage,
+                onTap: () {
+                  unawaited(_handleAddCurrentPage());
+                },
               ),
             ],
           ),
