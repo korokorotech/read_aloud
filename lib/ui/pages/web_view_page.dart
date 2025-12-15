@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:read_aloud/entities/news_item_record.dart';
 import 'package:read_aloud/repositories/news_item_repository.dart';
@@ -33,10 +32,6 @@ class _WebViewPageState extends State<WebViewPage> {
   late String _setName;
   late final NewsItemRepository _newsItemRepository;
   InAppWebViewController? _webViewController;
-  final FlutterTts _flutterTts = FlutterTts();
-  final List<_CachedArticle> _cachedArticles = [];
-  bool _isSpeaking = false;
-  late final Future<void> _ttsInitFuture;
   late final Future<UserScript> _readabilityUserScriptFuture;
 
   @override
@@ -45,35 +40,7 @@ class _WebViewPageState extends State<WebViewPage> {
     _isAddMode = widget.openAddMode;
     _setName = widget.setName;
     _newsItemRepository = NewsItemRepository();
-    _ttsInitFuture = _setupTts();
     _readabilityUserScriptFuture = _loadReadabilityUserScript();
-  }
-
-  @override
-  void dispose() {
-    if (_isSpeaking) {
-      _flutterTts.stop();
-    }
-    super.dispose();
-  }
-
-  Future<void> _setupTts() async {
-    await _flutterTts.setSharedInstance(true);
-    await _flutterTts.setLanguage('ja-JP');
-    await _flutterTts.setSpeechRate(1);
-    await _flutterTts.awaitSpeakCompletion(true);
-    _flutterTts.setCompletionHandler(() {
-      if (!mounted) return;
-      setState(() {
-        _isSpeaking = false;
-      });
-    });
-    _flutterTts.setErrorHandler((msg) {
-      if (!mounted) return;
-      setState(() {
-        _isSpeaking = false;
-      });
-    });
   }
 
   Future<UserScript> _loadReadabilityUserScript() async {
@@ -212,18 +179,6 @@ class _WebViewPageState extends State<WebViewPage> {
       );
 
       if (!mounted) return;
-      setState(() {
-        _cachedArticles.add(
-          _CachedArticle(
-            id: saved.id,
-            url: url,
-            title: article.title?.trim().isNotEmpty == true
-                ? article.title!.trim()
-                : preview,
-            content: article.content,
-          ),
-        );
-      });
       _showAddedSnackBar(saved);
     } on DuplicateArticleException {
       if (!mounted) return;
@@ -260,10 +215,6 @@ class _WebViewPageState extends State<WebViewPage> {
   Future<void> _undoInsert(NewsItemRecord item) async {
     try {
       await _newsItemRepository.deleteArticle(item.id);
-      if (!mounted) return;
-      setState(() {
-        _cachedArticles.removeWhere((article) => article.id == item.id);
-      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('直前の追加を取り消しました。')),
       );
@@ -288,36 +239,6 @@ class _WebViewPageState extends State<WebViewPage> {
 
     const maxLength = 80;
     return body.length <= maxLength ? body : '${body.substring(0, maxLength)}…';
-  }
-
-  Future<void> _playCachedContent() async {
-    if (_cachedArticles.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('保存された本文がありません。')),
-      );
-      return;
-    }
-
-    try {
-      await _ttsInitFuture;
-      await _flutterTts.stop();
-      final buffer = StringBuffer();
-      for (final article in _cachedArticles) {
-        buffer.writeln(article.content);
-      }
-      setState(() {
-        _isSpeaking = true;
-      });
-      await _flutterTts.speak(buffer.toString());
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isSpeaking = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('TTSエラー: $e')),
-      );
-    }
   }
 
   Future<_ExtractedArticle?> _extractArticleFromUrl(String url) async {
@@ -579,13 +500,6 @@ class _WebViewPageState extends State<WebViewPage> {
                 onPressed: _toggleAddMode,
               ),
               const SizedBox(height: 12),
-              FilledButton.icon(
-                icon: Icon(
-                  _isSpeaking ? Icons.volume_up : Icons.play_arrow,
-                ),
-                label: Text(_isSpeaking ? '再生中...' : 'TTS再生'),
-                onPressed: _isSpeaking ? null : _playCachedContent,
-              ),
             ],
           ),
         ),
@@ -598,20 +512,6 @@ class _ExtractedArticle {
   const _ExtractedArticle({this.title, required this.content});
 
   final String? title;
-  final String content;
-}
-
-class _CachedArticle {
-  _CachedArticle({
-    required this.id,
-    required this.url,
-    required this.title,
-    required this.content,
-  });
-
-  final String id;
-  final String url;
-  final String title;
   final String content;
 }
 
