@@ -138,9 +138,7 @@ class _WebViewPageState extends State<WebViewPage> {
 
     showAutoHideSnackBar(
       context,
-      message: _isAddMode
-          ? 'ニュース追加モードをオンにしました。'
-          : 'ニュース追加モードをオフにしました。',
+      message: _isAddMode ? 'ニュース追加モードをオンにしました。' : 'ニュース追加モードをオフにしました。',
       duration: const Duration(seconds: 3),
       action: SnackBarAction(
         label: 'OK',
@@ -253,8 +251,11 @@ class _WebViewPageState extends State<WebViewPage> {
       ),
       initialUserScripts: UnmodifiableListView<UserScript>([userScript]),
       onWebViewCreated: (_) {},
-      onLoadStop: (controller, _) async {
+      onLoadStop: (controller, loadedUrl) async {
         try {
+          if (loadedUrl?.host == "news.google.com") {
+            return;
+          }
           final article = await _extractReadableArticle(controller);
           if (!completer.isCompleted) {
             completer.complete(article);
