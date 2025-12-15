@@ -33,6 +33,7 @@ class _WebViewPageState extends State<WebViewPage> {
   late String _setName;
   late final NewsItemRepository _newsItemRepository;
   InAppWebViewController? _webViewController;
+  bool _showActionMenu = false;
   late final Future<UserScript> _readabilityUserScriptFuture;
 
   @override
@@ -129,6 +130,33 @@ class _WebViewPageState extends State<WebViewPage> {
         ],
       ),
     );
+  }
+
+  void _handleAddCurrentPage() {
+    showAutoHideSnackBar(
+      context,
+      message: '現在のページを追加する機能は準備中です。',
+    );
+  }
+
+  void _toggleActionMenu() {
+    setState(() {
+      _showActionMenu = !_showActionMenu;
+    });
+  }
+
+  void _handleBulkAddFromMenu() {
+    setState(() {
+      _showActionMenu = false;
+    });
+    _handleBulkAdd();
+  }
+
+  void _handleToggleAddModeFromMenu() {
+    setState(() {
+      _showActionMenu = false;
+    });
+    _toggleAddMode();
   }
 
   void _toggleAddMode() {
@@ -481,29 +509,70 @@ class _WebViewPageState extends State<WebViewPage> {
           ),
         ),
         Positioned(
-          left: 16,
+          right: 16,
           bottom: 20,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              FilledButton.icon(
-                icon: const Icon(Icons.tune),
-                label: const Text('一括設定'),
-                onPressed: _handleBulkAdd,
+              if (_showActionMenu) _buildActionMenu(),
+              if (_showActionMenu) const SizedBox(height: 12),
+              FloatingActionButton.small(
+                heroTag: 'webview-settings',
+                tooltip: 'その他の操作',
+                onPressed: _toggleActionMenu,
+                child: const Icon(Icons.settings),
               ),
               const SizedBox(height: 12),
-              FilledButton.icon(
-                icon: Icon(
-                  _isAddMode ? Icons.check_circle : Icons.add_circle,
-                ),
-                label: Text(_isAddMode ? '追加モード ON' : 'ニュース追加モード'),
-                onPressed: _toggleAddMode,
+              FloatingActionButton(
+                heroTag: 'webview-add-current',
+                tooltip: '現在のページを追加',
+                onPressed: _handleAddCurrentPage,
+                child: const Icon(Icons.add),
               ),
-              const SizedBox(height: 12),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildActionMenu() {
+    final toggleLabel =
+        _isAddMode ? 'リンクタップで追加オフ' : 'リンクタップで追加オン';
+    final toggleIcon = _isAddMode ? Icons.link_off : Icons.link;
+    return Material(
+      elevation: 6,
+      borderRadius: BorderRadius.circular(16),
+      color: Theme.of(context).colorScheme.surface,
+      child: SizedBox(
+        width: 220,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextButton.icon(
+                onPressed: _handleBulkAddFromMenu,
+                icon: const Icon(Icons.tune),
+                label: const Text('一括追加'),
+                style: TextButton.styleFrom(
+                  alignment: Alignment.centerLeft,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _handleToggleAddModeFromMenu,
+                icon: Icon(toggleIcon),
+                label: Text(toggleLabel),
+                style: TextButton.styleFrom(
+                  alignment: Alignment.centerLeft,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
