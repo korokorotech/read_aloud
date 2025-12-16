@@ -11,8 +11,8 @@ class PlayerService extends ChangeNotifier {
     _setupTts();
   }
 
-  static const CHUNK_END_CHECK_START_LENGTH = 100;
-  static const CHUNK_MAX_LENGTH = 500;
+  static const CHUNK_END_CHECK_START_LENGTH = 500;
+  static const CHUNK_MAX_LENGTH = 1000;
 
   static final PlayerService instance = PlayerService._();
 
