@@ -29,6 +29,7 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
   bool _isLoading = true;
   String? _errorMessage;
   NewsSetDetail? _detail;
+  String? _editingName;
 
   @override
   void initState() {
@@ -45,7 +46,23 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
         final isActiveSet = _player.currentSetId == widget.setId;
         return Scaffold(
           appBar: AppBar(
-            title: Text(title),
+            titleSpacing: 0,
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _editingName ?? title,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'ニュースセット名を変更',
+                  onPressed: _handleRename,
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+              ],
+            ),
           ),
           body: SafeArea(
             child: _isLoading
@@ -85,21 +102,19 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
       );
     }
 
-    final children = <Widget>[];
+    final children = <Widget>[
+      _PlaybackSection(
+        detail: detail,
+        player: _player,
+        isActiveSet: isActiveSet,
+        onStartSet: () => unawaited(_player.startWithDetail(detail)),
+      ),
+      const SizedBox(height: 16),
+    ];
 
     if (detail.items.isEmpty) {
       children.add(const _EmptyItemsState());
     } else {
-      children.add(
-        _PlaybackSection(
-          detail: detail,
-          player: _player,
-          isActiveSet: isActiveSet,
-          onStartSet: () => unawaited(_player.startWithDetail(detail)),
-        ),
-      );
-      children.add(const SizedBox(height: 16));
-
       for (var i = 0; i < detail.items.length; i++) {
         final item = detail.items[i];
         final isCurrent = isActiveSet &&
@@ -120,6 +135,7 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
         children.add(const SizedBox(height: 12));
       }
     }
+    children.add(const SizedBox(height: 120));
 
     return RefreshIndicator(
       onRefresh: () => _loadDetail(showSpinner: false),
@@ -191,6 +207,50 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
     );
   }
 
+  Future<void> _handleRename() async {
+    final currentDetail = _detail;
+    if (currentDetail == null) {
+      return;
+    }
+
+    final controller = TextEditingController(text: currentDetail.name);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('セット名を編集'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'ニュースセット名',
+              border: OutlineInputBorder(),
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(controller.text.trim()),
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || newName == null || newName.isEmpty) {
+      return;
+    }
+    setState(() {
+      _editingName = newName;
+      _detail = currentDetail.copyWith(name: newName);
+    });
+  }
+
   Future<void> _loadDetail({bool showSpinner = true}) async {
     if (showSpinner) {
       setState(() {
@@ -203,6 +263,7 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
       if (!mounted) return;
       setState(() {
         _detail = detail;
+        _editingName = detail?.name;
         _isLoading = false;
         _errorMessage = null;
       });
@@ -288,63 +349,69 @@ class _PlaybackSection extends StatelessWidget {
         ? (Uri.tryParse(currentItem.url)?.host ?? currentItem.url)
         : '-';
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isCurrentSet
-                  ? '再生中 ${index + 1} / ${player.currentItems.length}'
-                  : 'まだ再生していません',
-              style: theme.bodySmall,
+    final statusText = isCurrentSet
+        ? '再生中 ${index + 1} / ${player.currentItems.length}'
+        : 'まだ再生していません';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          statusText,
+          style: theme.labelSmall?.copyWith(color: Colors.black54),
+        ),
+        if (currentItem != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            currentItem.previewText,
+            style: theme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
             ),
-            if (currentItem != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                currentItem.previewText,
-                style: theme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            domain,
+            style: theme.bodySmall?.copyWith(color: Colors.black54),
+          ),
+        ],
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            IconButton.filledTonal(
+              icon: const Icon(Icons.skip_previous),
+              tooltip: '前の記事',
+              onPressed: isCurrentSet && player.canPlayPrevious
+                  ? player.playPrevious
+                  : null,
+              iconSize: 24,
+            ),
+            const SizedBox(width: 12),
+            IconButton.filled(
+              icon: Icon(
+                isCurrentSet && player.isPlaying
+                    ? Icons.pause
+                    : Icons.play_arrow,
               ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton.filledTonal(
-                  icon: const Icon(Icons.skip_previous),
-                  onPressed: isCurrentSet && player.canPlayPrevious
-                      ? player.playPrevious
-                      : null,
-                  iconSize: 28,
-                ),
-                const SizedBox(width: 16),
-                FilledButton.icon(
-                  onPressed: hasItems
-                      ? (isCurrentSet ? player.togglePlayPause : onStartSet)
-                      : null,
-                  icon: Icon(isCurrentSet && player.isPlaying
-                      ? Icons.pause
-                      : Icons.play_arrow),
-                  label: Text(isCurrentSet && player.isPlaying ? '一時停止' : '再生'),
-                ),
-                const SizedBox(width: 16),
-                IconButton.filledTonal(
-                  icon: const Icon(Icons.skip_next),
-                  onPressed: isCurrentSet && player.canPlayNext
-                      ? player.playNext
-                      : null,
-                  iconSize: 28,
-                ),
-              ],
+              tooltip: isCurrentSet && player.isPlaying ? '一時停止' : '再生',
+              onPressed: hasItems
+                  ? (isCurrentSet ? player.togglePlayPause : onStartSet)
+                  : null,
+              iconSize: 24,
+            ),
+            const SizedBox(width: 12),
+            IconButton.filledTonal(
+              icon: const Icon(Icons.skip_next),
+              tooltip: '次の記事',
+              onPressed:
+                  isCurrentSet && player.canPlayNext ? player.playNext : null,
+              iconSize: 24,
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -378,44 +445,31 @@ class _NewsItemCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 item.previewText,
-                style: theme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 '$domain ・ $addedLabel',
                 style: theme.bodySmall?.copyWith(color: Colors.black54),
               ),
-              if (isCurrent) ...[
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.volume_up,
-                        size: 16, color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(width: 4),
-                    Text(
-                      '再生対象',
-                      style: theme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
               if (onOpenUrl != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton.icon(
-                    icon: const Icon(Icons.open_in_new),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 32),
+                    ),
+                    icon: const Icon(Icons.open_in_new, size: 18),
                     label: const Text('記事を開く'),
                     onPressed: onOpenUrl,
                   ),

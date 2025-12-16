@@ -14,4 +14,18 @@ class NewsSetDetail {
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<NewsItemRecord> items;
+
+  NewsSetDetail copyWith({
+    String? name,
+    DateTime? updatedAt,
+    List<NewsItemRecord>? items,
+  }) {
+    return NewsSetDetail(
+      id: id,
+      name: name ?? this.name,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      items: items ?? this.items,
+    );
+  }
 }
