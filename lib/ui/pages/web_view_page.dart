@@ -53,10 +53,17 @@ class _WebViewPageState extends State<WebViewPage> {
     );
   }
 
-  Future<void> _handleBack() async {
+  Future<bool> _goBackInWebViewIfPossible() async {
     final controller = _webViewController;
     if (controller != null && await controller.canGoBack()) {
       await controller.goBack();
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _handleBack() async {
+    if (await _goBackInWebViewIfPossible()) {
       return;
     }
 
@@ -65,6 +72,11 @@ class _WebViewPageState extends State<WebViewPage> {
     } else {
       context.pop();
     }
+  }
+
+  Future<bool> _handleSystemBack() async {
+    final handled = await _goBackInWebViewIfPossible();
+    return !handled;
   }
 
   Future<void> _handleRename() async {
@@ -493,48 +505,51 @@ class _WebViewPageState extends State<WebViewPage> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<UserScript>(
-      future: _readabilityUserScriptFuture,
-      builder: (context, snapshot) {
-        final body = (() {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasData) {
-            return _buildWebView(snapshot.data!);
-          }
-          return const Center(
-            child: Text('Readability の読み込みに失敗しました'),
-          );
-        })();
+    return WillPopScope(
+      onWillPop: _handleSystemBack,
+      child: FutureBuilder<UserScript>(
+        future: _readabilityUserScriptFuture,
+        builder: (context, snapshot) {
+          final body = (() {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasData) {
+              return _buildWebView(snapshot.data!);
+            }
+            return const Center(
+              child: Text('Readability の読み込みに失敗しました'),
+            );
+          })();
 
-        return Scaffold(
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: _handleBack,
-            ),
-            titleSpacing: 0,
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _setName,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+          return Scaffold(
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: _handleBack,
+              ),
+              titleSpacing: 0,
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _setName,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'ニュースセット名を変更',
-                  onPressed: _handleRename,
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              ],
+                  IconButton(
+                    tooltip: 'ニュースセット名を変更',
+                    onPressed: _handleRename,
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                ],
+              ),
             ),
-          ),
-          body: body,
-        );
-      },
+            body: body,
+          );
+        },
+      ),
     );
   }
 
