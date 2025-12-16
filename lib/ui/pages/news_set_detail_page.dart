@@ -102,48 +102,57 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
       );
     }
 
-    final children = <Widget>[
-      _PlaybackSection(
-        detail: detail,
-        player: _player,
-        isActiveSet: isActiveSet,
-        onStartSet: () => unawaited(_player.startWithDetail(detail)),
-      ),
-      const SizedBox(height: 16),
-    ];
-
+    final listChildren = <Widget>[];
     if (detail.items.isEmpty) {
-      children.add(const _EmptyItemsState());
+      listChildren.add(const _EmptyItemsState());
     } else {
       for (var i = 0; i < detail.items.length; i++) {
         final item = detail.items[i];
         final isCurrent = isActiveSet &&
             _player.currentItems.isNotEmpty &&
             _player.currentIndex == i;
-        children.add(
+        listChildren.add(
           _NewsItemCard(
             item: item,
             domain: _extractDomain(item.url),
             addedLabel: _formatDateTime(
-                DateTime.fromMillisecondsSinceEpoch(item.addedAt)),
+              DateTime.fromMillisecondsSinceEpoch(item.addedAt),
+            ),
             isCurrent: isCurrent,
             onTap: () =>
                 unawaited(_player.startWithDetail(detail, startIndex: i)),
             onOpenUrl: () => _openNewsItemUrl(item),
           ),
         );
-        children.add(const SizedBox(height: 12));
+        listChildren.add(const SizedBox(height: 12));
       }
     }
-    children.add(const SizedBox(height: 120));
+    listChildren.add(const SizedBox(height: 140));
 
-    return RefreshIndicator(
-      onRefresh: () => _loadDetail(showSpinner: false),
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        children: children,
-      ),
+    return Column(
+      children: [
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.all(16),
+          child: _PlaybackSection(
+            detail: detail,
+            player: _player,
+            isActiveSet: isActiveSet,
+            onStartSet: () => unawaited(_player.startWithDetail(detail)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () => _loadDetail(showSpinner: false),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: listChildren,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -364,21 +373,16 @@ class _PlaybackSection extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             currentItem.previewText,
-            style: theme.bodyMedium?.copyWith(
+            style: theme.bodySmall?.copyWith(
               fontWeight: FontWeight.w600,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 2),
-          Text(
-            domain,
-            style: theme.bodySmall?.copyWith(color: Colors.black54),
-          ),
         ],
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Row(
-          mainAxisAlignment: MainAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             IconButton.filledTonal(
               icon: const Icon(Icons.skip_previous),
@@ -388,7 +392,7 @@ class _PlaybackSection extends StatelessWidget {
                   : null,
               iconSize: 24,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
             IconButton.filled(
               icon: Icon(
                 isCurrentSet && player.isPlaying
@@ -401,7 +405,7 @@ class _PlaybackSection extends StatelessWidget {
                   : null,
               iconSize: 24,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
             IconButton.filledTonal(
               icon: const Icon(Icons.skip_next),
               tooltip: '次の記事',
