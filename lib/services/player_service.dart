@@ -11,6 +11,9 @@ class PlayerService extends ChangeNotifier {
     _setupTts();
   }
 
+  static const CHUNK_END_CHECK_START_LENGTH = 100;
+  static const CHUNK_MAX_LENGTH = 500;
+
   static final PlayerService instance = PlayerService._();
 
   final FlutterTts _flutterTts = FlutterTts();
@@ -25,6 +28,25 @@ class PlayerService extends ChangeNotifier {
   String? _errorMessage;
   Future<void>? _playbackFuture;
   bool _stopRequested = false;
+  static const _chunkEndCheckStartLength = 25;
+  static const _chunkMaxLength = 500;
+  static const _chunkDelimiters = {
+    '、',
+    '。',
+    '\n',
+    ',',
+    '.',
+    '/',
+    '?',
+    '？',
+    '!',
+    '！',
+    '・',
+    '）',
+    ')',
+    '」',
+    '』',
+  };
 
   bool get isLoading => _isLoading;
   bool get isPlaying => _isPlaying;
@@ -189,7 +211,7 @@ class PlayerService extends ChangeNotifier {
       while (!_stopRequested && _currentIndex < _items.length) {
         final item = _items[_currentIndex];
         final text = _resolveTextForItem(item);
-        final chunks = _splitIntoChunks(text, 25);
+        final chunks = _splitIntoChunks(text);
         if (chunks.isEmpty) {
           if (!_advanceToNextItem()) {
             break;
@@ -237,15 +259,35 @@ class PlayerService extends ChangeNotifier {
     return item.previewText;
   }
 
-  List<String> _splitIntoChunks(String text, int size) {
+  List<String> _splitIntoChunks(String text) {
     if (text.isEmpty) {
       return const [];
     }
     final chunks = <String>[];
-    for (var i = 0; i < text.length; i += size) {
-      final end = (i + size < text.length) ? i + size : text.length;
-      chunks.add(text.substring(i, end));
+    var index = 0;
+    while (index < text.length) {
+      final nextIndex = _findChunkEnd(text, index);
+      chunks.add(text.substring(index, nextIndex));
+      index = nextIndex;
     }
     return chunks;
+  }
+
+  int _findChunkEnd(String text, int startIndex) {
+    final remaining = text.length - startIndex;
+    if (remaining <= _chunkMaxLength) {
+      return text.length;
+    }
+    final searchStart =
+        startIndex + _chunkEndCheckStartLength.clamp(0, remaining);
+    final searchEnd =
+        (startIndex + _chunkMaxLength).clamp(startIndex, text.length);
+    for (var i = searchStart; i < searchEnd; i++) {
+      final char = text[i];
+      if (_chunkDelimiters.contains(char)) {
+        return i + 1;
+      }
+    }
+    return searchEnd;
   }
 }

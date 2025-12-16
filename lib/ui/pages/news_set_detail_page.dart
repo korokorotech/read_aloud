@@ -46,13 +46,6 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
         return Scaffold(
           appBar: AppBar(
             title: Text(title),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                tooltip: '再読み込み',
-                onPressed: () => _loadDetail(),
-              ),
-            ],
           ),
           body: SafeArea(
             child: _isLoading
@@ -92,13 +85,7 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
       );
     }
 
-    final children = <Widget>[
-      _SetHeaderSection(
-        detail: detail,
-        updatedLabel: _formatDateTime(detail.updatedAt),
-      ),
-      const SizedBox(height: 16),
-    ];
+    final children = <Widget>[];
 
     if (detail.items.isEmpty) {
       children.add(const _EmptyItemsState());
@@ -122,8 +109,8 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
           _NewsItemCard(
             item: item,
             domain: _extractDomain(item.url),
-            addedLabel:
-                _formatDateTime(DateTime.fromMillisecondsSinceEpoch(item.addedAt)),
+            addedLabel: _formatDateTime(
+                DateTime.fromMillisecondsSinceEpoch(item.addedAt)),
             isCurrent: isCurrent,
             onTap: () =>
                 unawaited(_player.startWithDetail(detail, startIndex: i)),
@@ -247,40 +234,6 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
   String _extractDomain(String url) => Uri.tryParse(url)?.host ?? 'unknown';
 }
 
-class _SetHeaderSection extends StatelessWidget {
-  const _SetHeaderSection({
-    required this.detail,
-    required this.updatedLabel,
-  });
-
-  final NewsSetDetail detail;
-  final String updatedLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          detail.name,
-          style: theme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '記事 ${detail.items.length} 件',
-          style: theme.bodyMedium,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '最終更新 $updatedLabel',
-          style: theme.bodySmall?.copyWith(color: Colors.black54),
-        ),
-      ],
-    );
-  }
-}
-
 class _EmptyItemsState extends StatelessWidget {
   const _EmptyItemsState();
 
@@ -331,8 +284,9 @@ class _PlaybackSection extends StatelessWidget {
     final currentItem = isCurrentSet
         ? player.currentItems[index]
         : (hasItems ? detail.items.first : null);
-    final domain =
-        currentItem != null ? (Uri.tryParse(currentItem.url)?.host ?? currentItem.url) : '-';
+    final domain = currentItem != null
+        ? (Uri.tryParse(currentItem.url)?.host ?? currentItem.url)
+        : '-';
 
     return Card(
       child: Padding(
@@ -344,18 +298,17 @@ class _PlaybackSection extends StatelessWidget {
               isCurrentSet
                   ? '再生中 ${index + 1} / ${player.currentItems.length}'
                   : 'まだ再生していません',
-              style: theme.titleMedium,
+              style: theme.bodySmall,
             ),
             if (currentItem != null) ...[
               const SizedBox(height: 12),
               Text(
                 currentItem.previewText,
-                style: theme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                domain,
-                style: theme.bodySmall?.copyWith(color: Colors.black54),
+                style: theme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
             const SizedBox(height: 16),

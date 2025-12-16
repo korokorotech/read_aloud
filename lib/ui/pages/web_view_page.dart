@@ -599,8 +599,7 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   Widget _buildActionMenu() {
-    final toggleLabel =
-        _isAddMode ? 'リンクタップで追加オフ' : 'リンクタップで追加オン';
+    final toggleLabel = _isAddMode ? 'リンクタップで追加オフ' : 'リンクタップで追加オン';
     final toggleIcon = _isAddMode ? Icons.link_off : Icons.link;
     return Material(
       elevation: 2,
