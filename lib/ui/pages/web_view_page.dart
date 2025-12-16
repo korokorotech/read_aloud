@@ -586,27 +586,30 @@ class _WebViewPageState extends State<WebViewPage> {
         ),
         Positioned(
           right: 16,
-          bottom: 20,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (_showActionMenu) _buildActionMenu(),
-              if (_showActionMenu) const SizedBox(height: 12),
-              _ActionButton(
-                icon: Icons.settings,
-                tooltip: 'その他の操作',
-                onTap: _toggleActionMenu,
-              ),
-              const SizedBox(height: 12),
-              _ActionButton(
-                icon: Icons.add,
-                tooltip: '現在のページを追加',
-                onTap: () {
-                  unawaited(_handleAddCurrentPage());
-                },
-              ),
-            ],
+          bottom: 16,
+          child: SafeArea(
+            minimum: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (_showActionMenu) _buildActionMenu(),
+                if (_showActionMenu) const SizedBox(height: 12),
+                _ActionButton(
+                  icon: Icons.settings,
+                  tooltip: 'その他の操作',
+                  onTap: _toggleActionMenu,
+                ),
+                const SizedBox(height: 12),
+                _ActionButton(
+                  icon: Icons.add,
+                  tooltip: '現在のページを追加',
+                  onTap: () {
+                    unawaited(_handleAddCurrentPage());
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ],
