@@ -99,7 +99,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ホーム'),
+        title: const Text('ニュースセット一覧'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -118,12 +118,6 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'ニュースセット',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
               const SizedBox(height: 12),
               Expanded(
                 child: _isLoading
@@ -325,9 +319,8 @@ class _NewsSetCard extends StatelessWidget {
                         icon: isActive && isPlaying
                             ? const Icon(Icons.pause)
                             : const Icon(Icons.play_arrow),
-                        label: Text(isActive
-                            ? (isPlaying ? '一時停止' : '再生再開')
-                            : '再生'),
+                        label: Text(
+                            isActive ? (isPlaying ? '一時停止' : '再生再開') : '再生'),
                         onPressed: isLoading
                             ? null
                             : (isActive ? onTogglePlay : onPlay),
