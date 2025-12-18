@@ -22,8 +22,7 @@ class _HomePageState extends State<HomePage> {
   bool _isLoading = true;
   String? _errorMessage;
 
-  DateTime? _lastGeneratedDate;
-  int _generatedCountForDay = 0;
+  final Set<String> _reservedSetNames = <String>{};
 
   @override
   void initState() {
@@ -32,8 +31,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _handleCreateNewSet() async {
-    final (initialName, suggestedDate, suggestedSequence) =
-        _buildDefaultSetNameSuggestion();
+    final initialName = _generateDefaultSetName();
     final result = await showModalBottomSheet<NewsSetCreateResult>(
       context: context,
       isScrollControlled: true,
@@ -51,7 +49,7 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    _commitDefaultSetNameSuggestion(suggestedDate, suggestedSequence);
+    _commitDefaultSetNameSuggestion(result.setName);
 
     final initialUrl = resolveInitialUrlForNewsSet(result);
     if (initialUrl == null) {
@@ -335,24 +333,32 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  (String, DateTime, int) _buildDefaultSetNameSuggestion() {
+  String _generateDefaultSetName() {
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final isSameDay =
-        _lastGeneratedDate != null && _isSameDate(_lastGeneratedDate!, today);
-    final nextSequence = isSameDay ? _generatedCountForDay + 1 : 1;
     final dateStr = '${now.year}${_twoDigits(now.month)}${_twoDigits(now.day)}';
-    final suffix = _twoDigits(nextSequence);
-    return ('$dateStr-$suffix', today, nextSequence);
+    final takenNames = <String>{
+      ..._reservedSetNames,
+      ..._newsSets.map((set) => set.name),
+    };
+    var suffix = 1;
+    while (true) {
+      final candidate = '$dateStr-$suffix';
+      if (!takenNames.contains(candidate)) {
+        return candidate;
+      }
+      suffix += 1;
+    }
   }
 
-  void _commitDefaultSetNameSuggestion(DateTime date, int sequence) {
-    _lastGeneratedDate = date;
-    _generatedCountForDay = sequence;
+  void _commitDefaultSetNameSuggestion(String name) {
+    _reservedSetNames.add(name);
   }
 
-  bool _isSameDate(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
+  void _cleanupReservedSetNames() {
+    if (_reservedSetNames.isEmpty) return;
+    final existingNames = _newsSets.map((set) => set.name).toSet();
+    _reservedSetNames.removeWhere(existingNames.contains);
+  }
 
   String _twoDigits(int value) => value.toString().padLeft(2, '0');
 
@@ -372,6 +378,7 @@ class _HomePageState extends State<HomePage> {
         _isLoading = false;
         _errorMessage = null;
       });
+      _cleanupReservedSetNames();
     } catch (e) {
       if (!mounted) return;
       setState(() {

@@ -73,7 +73,7 @@ class NewsSetCreateModal extends StatefulWidget {
 class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
   late final TextEditingController _nameController;
   late final TextEditingController _urlController;
-  NewsSetAddOption _selectedOption = NewsSetAddOption.searchGoogle;
+  NewsSetAddOption _selectedOption = NewsSetAddOption.googleNews;
   String? _urlErrorText;
 
   bool get _requiresUrl => _selectedOption == NewsSetAddOption.customUrl;
