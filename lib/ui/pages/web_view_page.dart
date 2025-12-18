@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -43,6 +45,9 @@ class _WebViewPageState extends State<WebViewPage> {
     _setName = widget.setName;
     _newsItemRepository = NewsItemRepository();
     _readabilityUserScriptFuture = _loadReadabilityUserScript();
+    if (Platform.isAndroid) {
+      InAppWebViewController.setWebContentsDebuggingEnabled(true);
+    }
   }
 
   Future<UserScript> _loadReadabilityUserScript() async {
@@ -349,15 +354,24 @@ class _WebViewPageState extends State<WebViewPage> {
         javaScriptEnabled: true,
         mediaPlaybackRequiresUserGesture: false,
         clearCache: true,
+        isInspectable: kDebugMode ? true : false,
+        safeBrowsingEnabled: kDebugMode ? false : true,
       ),
       initialUserScripts: UnmodifiableListView<UserScript>([userScript]),
       onWebViewCreated: (_) {},
+      onConsoleMessage: kDebugMode
+          ? (controller, msg) {
+              debugPrint("WV console: ${msg.message}");
+            }
+          : null,
       onLoadStop: (controller, loadedUrl) async {
+        print("TEST_D 60 loadedUrl $loadedUrl");
         try {
           if (loadedUrl?.host == "news.google.com") {
             return;
           }
           final article = await _extractReadableArticle(controller);
+          print("TEST_D 60.1 成功");
           if (!completer.isCompleted) {
             completer.complete(article);
           }
@@ -368,6 +382,13 @@ class _WebViewPageState extends State<WebViewPage> {
         }
       },
       onReceivedError: (controller, request, error) {
+        print("TEST_D 50 ${request.url} $error");
+
+        if (request.isForMainFrame != true) {
+          print("TEST_D 50.2 noise");
+          return;
+        }
+
         if (!completer.isCompleted) {
           completer.complete(null);
         }

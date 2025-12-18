@@ -1,8 +1,19 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:read_aloud/ui/routes/app_router.dart';
 
 void main() {
+  initApp();
   runApp(const ReadAloudApp());
+}
+
+void initApp() {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isAndroid) {
+    InAppWebViewController.setWebContentsDebuggingEnabled(true);
+  }
 }
 
 class ReadAloudApp extends StatelessWidget {
