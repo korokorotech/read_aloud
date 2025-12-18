@@ -83,12 +83,7 @@ class _HomePageState extends State<HomePage> {
     final success =
         await _player.startSetById(set.id, fallbackSetName: set.name);
     if (!mounted) return;
-    if (success) {
-      showAutoHideSnackBar(
-        context,
-        message: '"${set.name}" の再生を開始しました。',
-      );
-    } else {
+    if (!success) {
       final message = _player.errorMessage ?? '再生できませんでした。';
       showAutoHideSnackBar(
         context,
@@ -272,8 +267,7 @@ class _HomePageState extends State<HomePage> {
     final playIcon = hasActiveSet && _player.isPlaying
         ? Icons.pause_rounded
         : Icons.play_arrow_rounded;
-    final playTooltip =
-        hasActiveSet && _player.isPlaying ? '一時停止' : '再生';
+    final playTooltip = hasActiveSet && _player.isPlaying ? '一時停止' : '再生';
 
     final playAction = !hasAnySet || isLoading
         ? null
@@ -281,20 +275,19 @@ class _HomePageState extends State<HomePage> {
             ? _player.togglePlayPause
             : () => _handlePlayFirstAvailableSet();
 
-    final previousAction = (!hasAnySet ||
-            !hasActiveSet ||
-            !_player.canPlayPrevious ||
-            isLoading)
-        ? null
-        : () => _player.playPrevious();
+    final previousAction =
+        (!hasAnySet || !hasActiveSet || !_player.canPlayPrevious || isLoading)
+            ? null
+            : () => _player.playPrevious();
 
     final nextAction =
         (!hasAnySet || !hasActiveSet || !_player.canPlayNext || isLoading)
             ? null
             : () => _player.playNext();
 
-    final openSetAction =
-        (!hasAnySet || !hasActiveSet || isLoading) ? null : _handleOpenCurrentSet;
+    final openSetAction = (!hasAnySet || !hasActiveSet || isLoading)
+        ? null
+        : _handleOpenCurrentSet;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
