@@ -28,6 +28,7 @@ class PlayerService extends ChangeNotifier {
   String? _errorMessage;
   Future<void>? _playbackFuture;
   bool _stopRequested = false;
+  static const _interItemSilence = Duration(seconds: 1);
   static const _chunkEndCheckStartLength = 25;
   static const _chunkMaxLength = 500;
   static const _chunkDelimiters = {
@@ -230,6 +231,8 @@ class PlayerService extends ChangeNotifier {
           if (_stopRequested) break;
         }
         if (_stopRequested) break;
+        await _waitBeforeAdvancing();
+        if (_stopRequested) break;
         if (!_advanceToNextItem()) {
           break;
         }
@@ -239,6 +242,17 @@ class PlayerService extends ChangeNotifier {
       _isPlaying = false;
       notifyListeners();
       _stopRequested = false;
+    }
+  }
+
+  Future<void> _waitBeforeAdvancing() async {
+    const tick = Duration(milliseconds: 100);
+    var elapsed = Duration.zero;
+    while (!_stopRequested && elapsed < _interItemSilence) {
+      final remaining = _interItemSilence - elapsed;
+      final delay = remaining < tick ? remaining : tick;
+      await Future.delayed(delay);
+      elapsed += delay;
     }
   }
 
