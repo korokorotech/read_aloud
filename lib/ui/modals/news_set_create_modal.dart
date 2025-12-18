@@ -14,7 +14,7 @@ extension NewsSetAddOptionLabel on NewsSetAddOption {
       case NewsSetAddOption.googleNews:
         return 'ニュースから追加';
       case NewsSetAddOption.customUrl:
-        return 'その他のサイトから追加';
+        return '指定のURLから追加';
     }
   }
 
@@ -33,9 +33,18 @@ extension NewsSetAddOptionLabel on NewsSetAddOption {
 Uri? resolveInitialUrlForNewsSet(NewsSetCreateResult result) {
   switch (result.option) {
     case NewsSetAddOption.searchGoogle:
-      final query = Uri.encodeQueryComponent(result.setName);
+      final keyword = result.searchKeyword;
+      if (keyword != null && keyword.isNotEmpty) {
+        final query = Uri.encodeQueryComponent(keyword);
+        return Uri.parse('https://www.google.com/search?q=$query');
+      }
       return Uri.parse('https://www.google.com');
     case NewsSetAddOption.googleNews:
+      final keyword = result.searchKeyword;
+      if (keyword != null && keyword.isNotEmpty) {
+        final query = Uri.encodeQueryComponent(keyword);
+        return Uri.parse('https://news.google.com/search?q=$query');
+      }
       return Uri.parse('https://news.google.com');
     case NewsSetAddOption.customUrl:
       return result.customUrl;
@@ -47,11 +56,13 @@ class NewsSetCreateResult {
     required this.setName,
     required this.option,
     this.customUrl,
+    this.searchKeyword,
   });
 
   final String setName;
   final NewsSetAddOption option;
   final Uri? customUrl;
+  final String? searchKeyword;
 }
 
 class NewsSetCreateModal extends StatefulWidget {
@@ -73,10 +84,14 @@ class NewsSetCreateModal extends StatefulWidget {
 class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
   late final TextEditingController _nameController;
   late final TextEditingController _urlController;
+  late final TextEditingController _keywordController;
   NewsSetAddOption _selectedOption = NewsSetAddOption.googleNews;
   String? _urlErrorText;
 
   bool get _requiresUrl => _selectedOption == NewsSetAddOption.customUrl;
+  bool get _showsKeywordField =>
+      _selectedOption == NewsSetAddOption.googleNews ||
+      _selectedOption == NewsSetAddOption.searchGoogle;
 
   bool get _isNextEnabled {
     final nameFilled = _nameController.text.trim().isNotEmpty;
@@ -90,12 +105,14 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
     super.initState();
     _nameController = TextEditingController(text: widget.initialName);
     _urlController = TextEditingController();
+    _keywordController = TextEditingController();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _urlController.dispose();
+    _keywordController.dispose();
     super.dispose();
   }
 
@@ -114,11 +131,20 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
       }
     }
 
+    String? searchKeyword;
+    if (_showsKeywordField) {
+      final keywordText = _keywordController.text.trim();
+      if (keywordText.isNotEmpty) {
+        searchKeyword = keywordText;
+      }
+    }
+
     Navigator.of(context).pop(
       NewsSetCreateResult(
         setName: setName,
         option: _selectedOption,
         customUrl: customUrl,
+        searchKeyword: searchKeyword,
       ),
     );
   }
@@ -203,6 +229,23 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
                   });
                 },
               ),
+              if (_showsKeywordField) ...[
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _keywordController,
+                  decoration: const InputDecoration(
+                    labelText: '検索キーワード(任意)',
+                    hintText: '検索キーワード(任意)',
+                    border: OutlineInputBorder(),
+                  ),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) {
+                    if (_isNextEnabled) {
+                      _handleNext();
+                    }
+                  },
+                ),
+              ],
               if (_requiresUrl) ...[
                 const SizedBox(height: 16),
                 TextField(
