@@ -10,6 +10,9 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:go_router/go_router.dart';
 import 'package:read_aloud/entities/news_item_record.dart';
 import 'package:read_aloud/repositories/news_item_repository.dart';
+import 'package:read_aloud/repositories/news_set_repository.dart';
+import 'package:read_aloud/services/player_service.dart';
+import 'package:read_aloud/ui/routes/app_router.dart';
 import 'package:read_aloud/ui/widgets/snack_bar_helper.dart';
 
 class WebViewPage extends StatefulWidget {
@@ -34,9 +37,13 @@ class _WebViewPageState extends State<WebViewPage> {
   late bool _isAddMode;
   late String _setName;
   late final NewsItemRepository _newsItemRepository;
+  late final NewsSetRepository _newsSetRepository;
+  final PlayerService _player = PlayerService.instance;
   InAppWebViewController? _webViewController;
   bool _showActionMenu = false;
   late final Future<UserScript> _readabilityUserScriptFuture;
+  bool _hasExistingSet = false;
+  bool _isCheckingSetExists = true;
 
   @override
   void initState() {
@@ -44,7 +51,9 @@ class _WebViewPageState extends State<WebViewPage> {
     _isAddMode = widget.openAddMode;
     _setName = widget.setName;
     _newsItemRepository = NewsItemRepository();
+    _newsSetRepository = NewsSetRepository();
     _readabilityUserScriptFuture = _loadReadabilityUserScript();
+    unawaited(_checkSetExists());
     if (Platform.isAndroid) {
       InAppWebViewController.setWebContentsDebuggingEnabled(true);
     }
@@ -56,6 +65,34 @@ class _WebViewPageState extends State<WebViewPage> {
       source: source,
       injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
     );
+  }
+
+  Future<void> _checkSetExists() async {
+    try {
+      final exists = await _newsSetRepository.exists(widget.setId);
+      if (!mounted) return;
+      setState(() {
+        _hasExistingSet = exists;
+        _isCheckingSetExists = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _hasExistingSet = false;
+        _isCheckingSetExists = false;
+      });
+    }
+  }
+
+  void _markSetAsAvailable() {
+    if (!mounted) return;
+    if (_hasExistingSet && !_isCheckingSetExists) {
+      return;
+    }
+    setState(() {
+      _hasExistingSet = true;
+      _isCheckingSetExists = false;
+    });
   }
 
   Future<bool> _goBackInWebViewIfPossible() async {
@@ -82,6 +119,36 @@ class _WebViewPageState extends State<WebViewPage> {
   Future<bool> _handleSystemBack() async {
     final handled = await _goBackInWebViewIfPossible();
     return !handled;
+  }
+
+  Future<void> _handleOpenSetDetail() async {
+    if (_isCheckingSetExists || !_hasExistingSet) {
+      return;
+    }
+    await context.pushSetDetail(widget.setId);
+  }
+
+  Future<void> _handleStartSetPlayback() async {
+    if (_isCheckingSetExists || !_hasExistingSet) {
+      return;
+    }
+    final success = await _player.startSetById(
+      widget.setId,
+      fallbackSetName: _setName,
+    );
+    if (!mounted) return;
+    if (success) {
+      showAutoHideSnackBar(
+        context,
+        message: 'ニュースセットの再生を開始します。',
+      );
+    } else {
+      final message = _player.errorMessage ?? '再生を開始できませんでした。';
+      showAutoHideSnackBar(
+        context,
+        message: message,
+      );
+    }
   }
 
   Future<void> _handleRename() async {
@@ -194,6 +261,7 @@ class _WebViewPageState extends State<WebViewPage> {
 
       final saved = await _saveExtractedArticle(normalizedUrl, article);
       if (!mounted) return;
+      _markSetAsAvailable();
       _showAddedSnackBar(saved);
     } on DuplicateArticleException {
       if (!mounted) return;
@@ -268,6 +336,7 @@ class _WebViewPageState extends State<WebViewPage> {
       final saved = await _saveExtractedArticle(url, article);
 
       if (!mounted) return;
+      _markSetAsAvailable();
       _showAddedSnackBar(saved);
     } on DuplicateArticleException {
       if (!mounted) return;
@@ -575,6 +644,7 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   Widget _buildWebView(UserScript readabilityScript) {
+    final canControlSet = !_isCheckingSetExists && _hasExistingSet;
     return Stack(
       children: [
         Positioned.fill(
@@ -617,11 +687,29 @@ class _WebViewPageState extends State<WebViewPage> {
                 if (_showActionMenu) _buildActionMenu(),
                 if (_showActionMenu) const SizedBox(height: 12),
                 _ActionButton(
+                  icon: Icons.play_arrow_rounded,
+                  tooltip: '先頭から再生',
+                  onTap: canControlSet
+                      ? () {
+                          unawaited(_handleStartSetPlayback());
+                        }
+                      : null,
+                  enabled: canControlSet,
+                ),
+                const SizedBox(height: 10),
+                _ActionButton(
+                  icon: Icons.open_in_new_rounded,
+                  tooltip: 'ニュースセット詳細に移動',
+                  onTap: canControlSet ? _handleOpenSetDetail : null,
+                  enabled: canControlSet,
+                ),
+                const SizedBox(height: 10),
+                _ActionButton(
                   icon: Icons.settings,
                   tooltip: 'その他の操作',
                   onTap: _toggleActionMenu,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _ActionButton(
                   icon: Icons.add,
                   tooltip: '現在のページを追加',
@@ -688,34 +776,42 @@ class _ActionButton extends StatelessWidget {
   const _ActionButton({
     required this.icon,
     required this.tooltip,
-    required this.onTap,
+    this.onTap,
+    this.enabled = true,
   });
 
   final IconData icon;
   final String tooltip;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final backgroundColor = enabled
+        ? theme.colorScheme.primaryContainer
+        : theme.colorScheme.surfaceContainerHighest;
+    final iconColor =
+        enabled ? theme.colorScheme.onPrimaryContainer : theme.disabledColor;
+    final radius = BorderRadius.circular(12);
     return Material(
-      elevation: 1.2,
+      elevation: enabled ? 1.2 : 0,
       shadowColor: Colors.black12,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      color: theme.colorScheme.primaryContainer,
+      shape: RoundedRectangleBorder(borderRadius: radius),
+      color: backgroundColor,
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
+        borderRadius: radius,
+        onTap: enabled ? onTap : null,
         child: SizedBox(
-          width: 48,
-          height: 48,
+          width: 40,
+          height: 40,
           child: Center(
             child: Tooltip(
               message: tooltip,
               child: Icon(
                 icon,
-                size: 20,
-                color: theme.colorScheme.onPrimaryContainer,
+                size: 18,
+                color: iconColor,
               ),
             ),
           ),

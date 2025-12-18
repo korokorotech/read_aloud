@@ -76,6 +76,18 @@ class NewsSetRepository {
     );
   }
 
+  Future<bool> exists(String setId) async {
+    final db = await _database.database;
+    final result = await db.query(
+      'news_sets',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [setId],
+      limit: 1,
+    );
+    return result.isNotEmpty;
+  }
+
   static DateTime _toDateTime(Object? value) {
     final millis = _asInt(value);
     return DateTime.fromMillisecondsSinceEpoch(millis);
