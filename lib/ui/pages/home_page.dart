@@ -143,6 +143,9 @@ class _HomePageState extends State<HomePage> {
                                       return ListView.separated(
                                         physics:
                                             const AlwaysScrollableScrollPhysics(),
+                                        padding: const EdgeInsets.only(
+                                          bottom: 120,
+                                        ),
                                         itemCount: _newsSets.length,
                                         separatorBuilder: (_, __) =>
                                             const SizedBox(height: 12),
