@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:read_aloud/entities/news_set_summary.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
@@ -181,27 +183,19 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
               ),
-              AnimatedBuilder(
-                animation: _player,
-                builder: (context, _) {
-                  final hasControls = _hasActiveSet;
-                  final bottomOffset = hasControls ? 112.0 : 24.0;
-                  final color = Theme.of(context).colorScheme.primary;
-                  return Positioned(
-                    right: 0,
-                    bottom: bottomOffset,
-                    child: Material(
-                      color: color,
-                      elevation: 6,
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        tooltip: 'ニュースセットを新規作成',
-                        onPressed: _handleCreateNewSet,
-                        icon: const Icon(Icons.add, color: Colors.white),
-                      ),
-                    ),
-                  );
-                },
+              Positioned(
+                right: 0,
+                bottom: 112,
+                child: Material(
+                  color: Theme.of(context).colorScheme.primary,
+                  elevation: 6,
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    tooltip: 'ニュースセットを新規作成',
+                    onPressed: _handleCreateNewSet,
+                    icon: const Icon(Icons.add, color: Colors.white),
+                  ),
+                ),
               ),
               AnimatedBuilder(
                 animation: _player,
@@ -233,9 +227,6 @@ class _HomePageState extends State<HomePage> {
 
   String _generateTempSetId() => 'set-${DateTime.now().millisecondsSinceEpoch}';
 
-  bool get _hasActiveSet =>
-      _player.currentSetId != null && _player.currentItems.isNotEmpty;
-
   Future<void> _handleOpenCurrentSet() async {
     final setId = _player.currentSetId;
     if (setId == null) {
@@ -246,13 +237,19 @@ class _HomePageState extends State<HomePage> {
     await _loadNewsSets(showSpinner: false);
   }
 
-  Widget _buildPlayerControls(BuildContext context) {
-    if (!_hasActiveSet) {
-      return const SizedBox.shrink();
+  void _handlePlayFirstAvailableSet() {
+    if (_newsSets.isEmpty) {
+      return;
     }
+    unawaited(_handlePlaySet(_newsSets.first));
+  }
 
+  Widget _buildPlayerControls(BuildContext context) {
     final theme = Theme.of(context);
     final isLoading = _player.isLoading;
+    final hasAnySet = _newsSets.isNotEmpty;
+    final hasActiveSet =
+        _player.currentSetId != null && _player.currentItems.isNotEmpty;
     final surfaceColor = theme.colorScheme.surface.withOpacity(0.95);
     final outlineColor = theme.colorScheme.outlineVariant;
 
@@ -271,6 +268,33 @@ class _HomePageState extends State<HomePage> {
         onPressed: onPressed,
       );
     }
+
+    final playIcon = hasActiveSet && _player.isPlaying
+        ? Icons.pause_rounded
+        : Icons.play_arrow_rounded;
+    final playTooltip =
+        hasActiveSet && _player.isPlaying ? '一時停止' : '再生';
+
+    final playAction = !hasAnySet || isLoading
+        ? null
+        : hasActiveSet
+            ? _player.togglePlayPause
+            : () => _handlePlayFirstAvailableSet();
+
+    final previousAction = (!hasAnySet ||
+            !hasActiveSet ||
+            !_player.canPlayPrevious ||
+            isLoading)
+        ? null
+        : () => _player.playPrevious();
+
+    final nextAction =
+        (!hasAnySet || !hasActiveSet || !_player.canPlayNext || isLoading)
+            ? null
+            : () => _player.playNext();
+
+    final openSetAction =
+        (!hasAnySet || !hasActiveSet || isLoading) ? null : _handleOpenCurrentSet;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -295,28 +319,22 @@ class _HomePageState extends State<HomePage> {
             buildControlButton(
               icon: Icons.skip_previous_rounded,
               tooltip: '一つ前',
-              onPressed: !_player.canPlayPrevious || isLoading
-                  ? null
-                  : () => _player.playPrevious(),
+              onPressed: previousAction,
             ),
             buildControlButton(
-              icon: _player.isPlaying
-                  ? Icons.pause_rounded
-                  : Icons.play_arrow_rounded,
-              tooltip: _player.isPlaying ? '一時停止' : '再生',
-              onPressed: isLoading ? null : _player.togglePlayPause,
+              icon: playIcon,
+              tooltip: playTooltip,
+              onPressed: playAction,
             ),
             buildControlButton(
               icon: Icons.skip_next_rounded,
               tooltip: '一つ先',
-              onPressed: !_player.canPlayNext || isLoading
-                  ? null
-                  : () => _player.playNext(),
+              onPressed: nextAction,
             ),
             buildControlButton(
               icon: Icons.open_in_new_rounded,
               tooltip: '再生中ニュースセット',
-              onPressed: isLoading ? null : _handleOpenCurrentSet,
+              onPressed: openSetAction,
             ),
           ],
         ),
