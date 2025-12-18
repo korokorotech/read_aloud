@@ -163,7 +163,6 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
       useSafeArea: true,
       builder: (context) => NewsSetCreateModal(
         initialName: detail.name,
-        isNameEditable: false,
         title: 'ニュースセットに追加',
       ),
     );

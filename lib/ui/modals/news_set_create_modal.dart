@@ -69,12 +69,10 @@ class NewsSetCreateModal extends StatefulWidget {
   const NewsSetCreateModal({
     super.key,
     required this.initialName,
-    this.isNameEditable = true,
     this.title,
   });
 
   final String initialName;
-  final bool isNameEditable;
   final String? title;
 
   @override
@@ -82,7 +80,6 @@ class NewsSetCreateModal extends StatefulWidget {
 }
 
 class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
-  late final TextEditingController _nameController;
   late final TextEditingController _urlController;
   late final TextEditingController _keywordController;
   NewsSetAddOption _selectedOption = NewsSetAddOption.googleNews;
@@ -94,32 +91,27 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
       _selectedOption == NewsSetAddOption.searchGoogle;
 
   bool get _isNextEnabled {
-    final nameFilled = _nameController.text.trim().isNotEmpty;
-    if (!nameFilled) return false;
-    if (!_requiresUrl) return true;
-    return Uri.tryParse(_urlController.text.trim()) != null;
+    if (_requiresUrl) {
+      return Uri.tryParse(_urlController.text.trim()) != null;
+    }
+    return true;
   }
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.initialName);
     _urlController = TextEditingController();
     _keywordController = TextEditingController();
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
     _urlController.dispose();
     _keywordController.dispose();
     super.dispose();
   }
 
   void _handleNext() {
-    final setName = _nameController.text.trim();
-    if (setName.isEmpty) return;
-
     Uri? customUrl;
     if (_requiresUrl) {
       customUrl = Uri.tryParse(_urlController.text.trim());
@@ -138,6 +130,7 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
         searchKeyword = keywordText;
       }
     }
+    final setName = searchKeyword ?? widget.initialName;
 
     Navigator.of(context).pop(
       NewsSetCreateResult(
@@ -169,18 +162,6 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
                     .textTheme
                     .titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'ニュースセット名',
-                  border: OutlineInputBorder(),
-                ),
-                readOnly: !widget.isNameEditable,
-                enabled: widget.isNameEditable,
-                onChanged:
-                    widget.isNameEditable ? (_) => setState(() {}) : null,
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<NewsSetAddOption>(
