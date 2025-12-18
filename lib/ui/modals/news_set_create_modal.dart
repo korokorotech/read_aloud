@@ -34,9 +34,9 @@ Uri? resolveInitialUrlForNewsSet(NewsSetCreateResult result) {
   switch (result.option) {
     case NewsSetAddOption.searchGoogle:
       final query = Uri.encodeQueryComponent(result.setName);
-      return Uri.parse('https://www.google.com/search?q=$query');
+      return Uri.parse('https://www.google.com');
     case NewsSetAddOption.googleNews:
-      return Uri.parse('https://news.google.com/home?hl=ja&gl=JP&ceid=JP:ja');
+      return Uri.parse('https://news.google.com');
     case NewsSetAddOption.customUrl:
       return result.customUrl;
   }
