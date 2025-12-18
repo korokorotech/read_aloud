@@ -114,74 +114,105 @@ class _HomePageState extends State<HomePage> {
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              const SizedBox(height: 12),
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : RefreshIndicator(
-                        onRefresh: () => _loadNewsSets(showSpinner: false),
-                        child: _errorMessage != null
-                            ? _ErrorList(
-                                message: _errorMessage!,
-                                onRetry: () => _loadNewsSets(),
-                              )
-                            : _newsSets.isEmpty
-                                ? const _EmptyList()
-                                : AnimatedBuilder(
-                                    animation: _player,
-                                    builder: (context, _) {
-                                      return ListView.separated(
-                                        physics:
-                                            const AlwaysScrollableScrollPhysics(),
-                                        padding: const EdgeInsets.only(
-                                          bottom: 120,
+              Positioned.fill(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : RefreshIndicator(
+                              onRefresh: () =>
+                                  _loadNewsSets(showSpinner: false),
+                              child: _errorMessage != null
+                                  ? _ErrorList(
+                                      message: _errorMessage!,
+                                      onRetry: () => _loadNewsSets(),
+                                    )
+                                  : _newsSets.isEmpty
+                                      ? const _EmptyList()
+                                      : AnimatedBuilder(
+                                          animation: _player,
+                                          builder: (context, _) {
+                                            return ListView.separated(
+                                              physics:
+                                                  const AlwaysScrollableScrollPhysics(),
+                                              padding: const EdgeInsets.only(
+                                                bottom: 160,
+                                                top: 16,
+                                              ),
+                                              itemCount: _newsSets.length,
+                                              separatorBuilder: (_, __) =>
+                                                  const SizedBox(height: 12),
+                                              itemBuilder: (context, index) {
+                                                final set = _newsSets[index];
+                                                final isActive =
+                                                    _player.currentSetId ==
+                                                        set.id;
+                                                final isPlaying = isActive &&
+                                                    _player.isPlaying;
+                                                final isLoadingPlayer =
+                                                    isActive &&
+                                                        _player.isLoading;
+                                                return _NewsSetCard(
+                                                  newsSet: set,
+                                                  subtitle:
+                                                      '${set.articleCount}件・最終更新 ${_formatUpdatedAt(set.updatedAt)}',
+                                                  onTap: () =>
+                                                      _handleOpenSet(set),
+                                                  onPlay: () =>
+                                                      _handlePlaySet(set),
+                                                  onTogglePlay:
+                                                      _player.togglePlayPause,
+                                                  isActive: isActive,
+                                                  isPlaying: isPlaying,
+                                                  isLoading: isLoadingPlayer,
+                                                );
+                                              },
+                                            );
+                                          },
                                         ),
-                                        itemCount: _newsSets.length,
-                                        separatorBuilder: (_, __) =>
-                                            const SizedBox(height: 12),
-                                        itemBuilder: (context, index) {
-                                          final set = _newsSets[index];
-                                          final isActive =
-                                              _player.currentSetId == set.id;
-                                          final isPlaying =
-                                              isActive && _player.isPlaying;
-                                          final isLoadingPlayer =
-                                              isActive && _player.isLoading;
-                                          return _NewsSetCard(
-                                            newsSet: set,
-                                            subtitle:
-                                                '${set.articleCount}件・最終更新 ${_formatUpdatedAt(set.updatedAt)}',
-                                            onTap: () => _handleOpenSet(set),
-                                            onPlay: () => _handlePlaySet(set),
-                                            onTogglePlay:
-                                                _player.togglePlayPause,
-                                            isActive: isActive,
-                                            isPlaying: isPlaying,
-                                            isLoading: isLoadingPlayer,
-                                          );
-                                        },
-                                      );
-                                    },
-                                  ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              AnimatedBuilder(
+                animation: _player,
+                builder: (context, _) {
+                  final hasControls = _hasActiveSet;
+                  final bottomOffset = hasControls ? 112.0 : 24.0;
+                  final color = Theme.of(context).colorScheme.primary;
+                  return Positioned(
+                    right: 0,
+                    bottom: bottomOffset,
+                    child: Material(
+                      color: color,
+                      elevation: 6,
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        tooltip: 'ニュースセットを新規作成',
+                        onPressed: _handleCreateNewSet,
+                        icon: const Icon(Icons.add, color: Colors.white),
                       ),
+                    ),
+                  );
+                },
+              ),
+              AnimatedBuilder(
+                animation: _player,
+                builder: (context, _) => Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildPlayerControls(context),
+                ),
               ),
             ],
-          ),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text('新規作成'),
-            onPressed: _handleCreateNewSet,
           ),
         ),
       ),
@@ -201,6 +232,97 @@ class _HomePageState extends State<HomePage> {
   }
 
   String _generateTempSetId() => 'set-${DateTime.now().millisecondsSinceEpoch}';
+
+  bool get _hasActiveSet =>
+      _player.currentSetId != null && _player.currentItems.isNotEmpty;
+
+  Future<void> _handleOpenCurrentSet() async {
+    final setId = _player.currentSetId;
+    if (setId == null) {
+      return;
+    }
+    await context.pushSetDetail(setId);
+    if (!mounted) return;
+    await _loadNewsSets(showSpinner: false);
+  }
+
+  Widget _buildPlayerControls(BuildContext context) {
+    if (!_hasActiveSet) {
+      return const SizedBox.shrink();
+    }
+
+    final theme = Theme.of(context);
+    final isLoading = _player.isLoading;
+    final surfaceColor = theme.colorScheme.surface.withOpacity(0.95);
+    final outlineColor = theme.colorScheme.outlineVariant;
+
+    IconButton buildControlButton({
+      required IconData icon,
+      required String tooltip,
+      required VoidCallback? onPressed,
+    }) {
+      return IconButton.filledTonal(
+        style: IconButton.styleFrom(
+          shape: const CircleBorder(),
+          padding: const EdgeInsets.all(12),
+        ),
+        icon: Icon(icon),
+        tooltip: tooltip,
+        onPressed: onPressed,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: outlineColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            buildControlButton(
+              icon: Icons.skip_previous_rounded,
+              tooltip: '一つ前',
+              onPressed: !_player.canPlayPrevious || isLoading
+                  ? null
+                  : () => _player.playPrevious(),
+            ),
+            buildControlButton(
+              icon: _player.isPlaying
+                  ? Icons.pause_rounded
+                  : Icons.play_arrow_rounded,
+              tooltip: _player.isPlaying ? '一時停止' : '再生',
+              onPressed: isLoading ? null : _player.togglePlayPause,
+            ),
+            buildControlButton(
+              icon: Icons.skip_next_rounded,
+              tooltip: '一つ先',
+              onPressed: !_player.canPlayNext || isLoading
+                  ? null
+                  : () => _player.playNext(),
+            ),
+            buildControlButton(
+              icon: Icons.open_in_new_rounded,
+              tooltip: '再生中ニュースセット',
+              onPressed: isLoading ? null : _handleOpenCurrentSet,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   (String, DateTime, int) _buildDefaultSetNameSuggestion() {
     final now = DateTime.now();
@@ -367,7 +489,7 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '「＋ 新規作成」からセットを作成して\nお気に入りの記事をキューに追加しましょう',
+            '右下の＋ボタンからセットを作成して\nお気に入りの記事をキューに追加しましょう',
             style:
                 Theme.of(context).textTheme.bodyMedium?.copyWith(color: color),
             textAlign: TextAlign.center,
