@@ -34,6 +34,9 @@ class WebViewPage extends StatefulWidget {
 }
 
 class _WebViewPageState extends State<WebViewPage> {
+  static const _logFileName = 'web_view_debug.log';
+  static const int _maxLogFileBytes = 512 * 1024;
+
   late bool _isAddMode;
   late String _setName;
   late final NewsItemRepository _newsItemRepository;
@@ -442,45 +445,44 @@ class _WebViewPageState extends State<WebViewPage> {
         }
         return false;
       },
-      onConsoleMessage: kDebugMode
-          ? (controller, msg) => debugPrint("WV console: ${msg.message}")
-          : null,
+      onConsoleMessage:
+          kDebugMode ? (controller, msg) => _logWithSave("WV console: ${msg.message}") : null,
       onLoadStop: (controller, loadedUrl) async {
         final loaded = loadedUrl?.toString();
         if (loaded != null && processedUrls.contains(loaded)) {
-          debugPrint("TEST_D 67 skip already processed $loaded");
+          _logWithSave("TEST_D 67 skip already processed $loaded");
           return;
         }
         if (loaded != null) {
           processedUrls.add(loaded);
         }
-        debugPrint("TEST_D 68 $loadCount $loadedUrl");
+        _logWithSave("TEST_D 68 $loadCount $loadedUrl");
         loadCount++;
         try {
           if (loadedUrl?.host == "news.google.com") {
             return;
           }
-          debugPrint("TEST_D 69\n");
+          _logWithSave("TEST_D 69");
 
           final article = await _extractReadableArticle(controller);
-          debugPrint("TEST_D 70 ${article?.content}");
+          _logWithSave("TEST_D 70 ${article?.content}");
           if (loadCount == 1) {
             firstArticle = article;
           }
 
           if (!triedReadMoreClick && _looksTruncated(article)) {
             triedReadMoreClick = true;
-            debugPrint("TEST_D 71 _tryClickReadMore from now");
+            _logWithSave("TEST_D 71 _tryClickReadMore from now");
             final clicked = await _tryClickReadMore(controller);
             if (clicked) {
-              debugPrint("TEST_D 74 clicked");
+              _logWithSave("TEST_D 74 clicked");
               return;
             }
           }
 
-          debugPrint("TEST_D 73 ${completer.isCompleted}");
+          _logWithSave("TEST_D 73 ${completer.isCompleted}");
           if (!completer.isCompleted) {
-            debugPrint("TEST_D 75 completed");
+            _logWithSave("TEST_D 75 completed");
             completer.complete(article ?? firstArticle);
           }
         } catch (_) {
@@ -528,15 +530,15 @@ class _WebViewPageState extends State<WebViewPage> {
       if (text == null) {
         return null;
       }
-      debugPrint("TEST_D 80 text unnormalized $text");
+      _logWithSave("TEST_D 80 text unnormalized $text");
       final normalized = normalize(text);
-      debugPrint("TEST_D 81 text normalized $text");
+      _logWithSave("TEST_D 81 text normalized $text");
       if (normalized.isEmpty) {
         return null;
       }
       return _ExtractedArticle(title: title, content: normalized);
     } else {
-      debugPrint('Readability failed: ${result['error']}');
+      _logWithSave('Readability failed: ${result['error']}');
     }
 
     return null;
@@ -547,8 +549,8 @@ class _WebViewPageState extends State<WebViewPage> {
       final raw = await controller.evaluateJavascript(
         source: _clickReadMoreJs,
       );
-      debugPrint("TEST_D 72 $raw");
       final jsonStr = raw is String ? raw : raw?.toString();
+      _logWithSave("TEST_D 72 $raw");
       if (jsonStr == null || jsonStr.isEmpty) {
         return false;
       }
@@ -558,9 +560,54 @@ class _WebViewPageState extends State<WebViewPage> {
         return true;
       }
     } catch (e) {
-      debugPrint('Read more click failed: $e');
+      _logWithSave('Read more click failed: $e');
     }
     return false;
+  }
+
+  void _logWithSave(String message) {
+    final line = '[${DateTime.now().toIso8601String()}] ${message.trimRight()}';
+    debugPrint(line);
+    unawaited(_appendLogLine(line));
+  }
+
+  Future<void> _appendLogLine(String line) async {
+    try {
+      final file = await _ensureLogFile();
+      await _rotateLogFileIfNeeded(file);
+      await file.writeAsString('$line\n', mode: FileMode.append, flush: true);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Log write failed: $e');
+      }
+    }
+  }
+
+  Future<File> _ensureLogFile() async {
+    final file = File('${Directory.systemTemp.path}/$_logFileName');
+    if (!await file.exists()) {
+      await file.create(recursive: true);
+    }
+    return file;
+  }
+
+  Future<void> _rotateLogFileIfNeeded(File file) async {
+    try {
+      final length = await file.length();
+      if (length < _maxLogFileBytes) {
+        return;
+      }
+      final rotated = File('${file.path}.1');
+      if (await rotated.exists()) {
+        await rotated.delete();
+      }
+      await file.rename(rotated.path);
+      await file.create();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Log rotation failed: $e');
+      }
+    }
   }
 
   bool _looksTruncated(_ExtractedArticle? article) {
