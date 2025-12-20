@@ -418,6 +418,10 @@ class _WebViewPageState extends State<WebViewPage> {
     final completer = Completer<_ExtractedArticle?>();
 
     late HeadlessInAppWebView headless;
+    int loadCount = 0;
+    bool triedReadMoreClick = false;
+    _ExtractedArticle? firstArticle;
+
     headless = HeadlessInAppWebView(
       initialSettings: InAppWebViewSettings(
         javaScriptEnabled: true,
@@ -425,41 +429,63 @@ class _WebViewPageState extends State<WebViewPage> {
         clearCache: true,
         isInspectable: kDebugMode ? true : false,
         safeBrowsingEnabled: kDebugMode ? false : true,
+        supportMultipleWindows: true,
+        javaScriptCanOpenWindowsAutomatically: true,
       ),
       initialUserScripts: UnmodifiableListView<UserScript>([userScript]),
-      onWebViewCreated: (_) {},
+      onCreateWindow: (controller, createWindowRequest) async {
+        final targetUrl = createWindowRequest.request.url;
+        if (targetUrl != null) {
+          await controller.loadUrl(urlRequest: URLRequest(url: targetUrl));
+          return true;
+        }
+        return false;
+      },
       onConsoleMessage: kDebugMode
-          ? (controller, msg) {
-              debugPrint("WV console: ${msg.message}");
-            }
+          ? (controller, msg) => debugPrint("WV console: ${msg.message}")
           : null,
       onLoadStop: (controller, loadedUrl) async {
-        print("TEST_D 60 loadedUrl $loadedUrl");
+        print("TEST_D 68 $loadCount");
+        loadCount++;
         try {
           if (loadedUrl?.host == "news.google.com") {
             return;
           }
+          print("TEST_D 69\n");
+
           final article = await _extractReadableArticle(controller);
-          print("TEST_D 60.1 成功");
+          print("TEST_D 70 ${article?.content}");
+          if (loadCount == 1) {
+            firstArticle = article;
+          }
+
+          if (!triedReadMoreClick && _looksTruncated(article)) {
+            triedReadMoreClick = true;
+            print("TEST_D 71 _tryClickReadMore from now");
+            final clicked = await _tryClickReadMore(controller);
+            if (clicked) {
+              print("TEST_D 74 clicked");
+              return;
+            }
+          }
+
+          print("TEST_D 73 ${completer.isCompleted}");
           if (!completer.isCompleted) {
-            completer.complete(article);
+            print("TEST_D 75 completed");
+            completer.complete(article ?? firstArticle);
           }
         } catch (_) {
           if (!completer.isCompleted) {
-            completer.complete(null);
+            completer.complete(firstArticle);
           }
         }
       },
       onReceivedError: (controller, request, error) {
-        print("TEST_D 50 ${request.url} $error");
-
         if (request.isForMainFrame != true) {
-          print("TEST_D 50.2 noise");
           return;
         }
-
         if (!completer.isCompleted) {
-          completer.complete(null);
+          completer.complete(firstArticle);
         }
       },
     );
@@ -470,7 +496,7 @@ class _WebViewPageState extends State<WebViewPage> {
         urlRequest: URLRequest(url: WebUri(url)),
       );
       return await completer.future
-          .timeout(const Duration(seconds: 20), onTimeout: () => null);
+          .timeout(const Duration(seconds: 20), onTimeout: () => firstArticle);
     } finally {
       await headless.dispose();
     }
@@ -503,6 +529,39 @@ class _WebViewPageState extends State<WebViewPage> {
     }
 
     return null;
+  }
+
+  Future<bool> _tryClickReadMore(InAppWebViewController controller) async {
+    try {
+      final raw = await controller.evaluateJavascript(
+        source: _clickReadMoreJs,
+      );
+      print("TEST_D 72 $raw");
+      final jsonStr = raw is String ? raw : raw?.toString();
+      if (jsonStr == null || jsonStr.isEmpty) {
+        return false;
+      }
+
+      final Map<String, dynamic> result = jsonDecode(jsonStr);
+      if (result['ok'] == true && result['clicked'] == true) {
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Read more click failed: $e');
+    }
+    return false;
+  }
+
+  bool _looksTruncated(_ExtractedArticle? article) {
+    if (article == null) {
+      return true;
+    }
+    final text = article.content.trim();
+    if (text.length < 200) {
+      return true;
+    }
+    const hints = ['記事全文を読む', '続きを読む', '続きは', '記事の続き', 'この先は'];
+    return hints.any(text.contains);
   }
 
   String normalize(String s) {
@@ -837,6 +896,59 @@ const _readabilityExtractorJs = r'''
       title: article.title || '',
       text: article.textContent || ''
     });
+  } catch (e) {
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+})()
+''';
+
+const _clickReadMoreJs = r'''
+(() => {
+  try {
+    console.log("TEST_D 101 _clickReadMoreJs start");
+    const KEYWORDS = [
+      '記事全文', '全文', '全文を読む', '記事全文を読む',
+      '続きを読む', 'もっと読む', '続き', '続きはこちら',
+      'Continue', 'Read more', 'More'
+    ];
+
+    const norm = (s) => (s || '').replace(/\s+/g, '').trim();
+
+    const nodes = Array.from(document.querySelectorAll(
+      'a,button,[role="button"],input[type="button"],input[type="submit"]'
+    ));
+
+    const getLabel = (el) => {
+      const text = el.innerText || el.textContent || '';
+      const aria = el.getAttribute('aria-label') || '';
+      const title = el.getAttribute('title') || '';
+      const value = (el.tagName === 'INPUT') ? (el.getAttribute('value') || '') : '';
+      return norm(text) || norm(aria) || norm(title) || norm(value);
+    };
+
+    const isVisible = (el) => {
+      const r = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+
+    const hit = nodes.find(el => {
+      if (!el) return false;
+      const label = getLabel(el);
+      if (!label) return false;
+      if (!isVisible(el)) return false;
+      return KEYWORDS.some(k => label.includes(norm(k)));
+    });
+    console.log("TEST_D 100", hit);
+
+    if (!hit) {
+      return JSON.stringify({ ok: true, clicked: false });
+    }
+
+    const href = (hit.tagName === 'A') ? (hit.getAttribute('href') || '') : '';
+    hit.click();
+
+    return JSON.stringify({ ok: true, clicked: true, href });
   } catch (e) {
     return JSON.stringify({ ok: false, error: String(e) });
   }
