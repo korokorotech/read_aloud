@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -444,44 +443,44 @@ class _WebViewPageState extends State<WebViewPage> {
         return false;
       },
       onConsoleMessage: kDebugMode
-          ? (controller, msg) => log("WV console: ${msg.message}")
+          ? (controller, msg) => debugPrint("WV console: ${msg.message}")
           : null,
       onLoadStop: (controller, loadedUrl) async {
         final loaded = loadedUrl?.toString();
         if (loaded != null && processedUrls.contains(loaded)) {
-          log("TEST_D 67 skip already processed $loaded");
+          debugPrint("TEST_D 67 skip already processed $loaded");
           return;
         }
         if (loaded != null) {
           processedUrls.add(loaded);
         }
-        log("TEST_D 68 $loadCount $loadedUrl");
+        debugPrint("TEST_D 68 $loadCount $loadedUrl");
         loadCount++;
         try {
           if (loadedUrl?.host == "news.google.com") {
             return;
           }
-          log("TEST_D 69\n");
+          debugPrint("TEST_D 69\n");
 
           final article = await _extractReadableArticle(controller);
-          log("TEST_D 70 ${article?.content}");
+          debugPrint("TEST_D 70 ${article?.content}");
           if (loadCount == 1) {
             firstArticle = article;
           }
 
           if (!triedReadMoreClick && _looksTruncated(article)) {
             triedReadMoreClick = true;
-            log("TEST_D 71 _tryClickReadMore from now");
+            debugPrint("TEST_D 71 _tryClickReadMore from now");
             final clicked = await _tryClickReadMore(controller);
             if (clicked) {
-              log("TEST_D 74 clicked");
+              debugPrint("TEST_D 74 clicked");
               return;
             }
           }
 
-          log("TEST_D 73 ${completer.isCompleted}");
+          debugPrint("TEST_D 73 ${completer.isCompleted}");
           if (!completer.isCompleted) {
-            log("TEST_D 75 completed");
+            debugPrint("TEST_D 75 completed");
             completer.complete(article ?? firstArticle);
           }
         } catch (_) {
@@ -529,13 +528,15 @@ class _WebViewPageState extends State<WebViewPage> {
       if (text == null) {
         return null;
       }
+      debugPrint("TEST_D 80 text unnormalized $text");
       final normalized = normalize(text);
+      debugPrint("TEST_D 81 text normalized $text");
       if (normalized.isEmpty) {
         return null;
       }
       return _ExtractedArticle(title: title, content: normalized);
     } else {
-      log('Readability failed: ${result['error']}');
+      debugPrint('Readability failed: ${result['error']}');
     }
 
     return null;
@@ -546,7 +547,7 @@ class _WebViewPageState extends State<WebViewPage> {
       final raw = await controller.evaluateJavascript(
         source: _clickReadMoreJs,
       );
-      log("TEST_D 72 $raw");
+      debugPrint("TEST_D 72 $raw");
       final jsonStr = raw is String ? raw : raw?.toString();
       if (jsonStr == null || jsonStr.isEmpty) {
         return false;
@@ -557,7 +558,7 @@ class _WebViewPageState extends State<WebViewPage> {
         return true;
       }
     } catch (e) {
-      log('Read more click failed: $e');
+      debugPrint('Read more click failed: $e');
     }
     return false;
   }
@@ -898,6 +899,8 @@ const _readabilityExtractorJs = r'''
     }
     const doc = document.cloneNode(true);
     const article = new Readability(doc).parse();
+    console.log("TEST_D 102 article.content", article.content);
+
     if (!article || !article.textContent) {
       return JSON.stringify({ ok: false, error: 'No article' });
     }
