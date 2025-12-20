@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -421,6 +422,7 @@ class _WebViewPageState extends State<WebViewPage> {
     int loadCount = 0;
     bool triedReadMoreClick = false;
     _ExtractedArticle? firstArticle;
+    final processedUrls = <String>{};
 
     headless = HeadlessInAppWebView(
       initialSettings: InAppWebViewSettings(
@@ -442,36 +444,44 @@ class _WebViewPageState extends State<WebViewPage> {
         return false;
       },
       onConsoleMessage: kDebugMode
-          ? (controller, msg) => debugPrint("WV console: ${msg.message}")
+          ? (controller, msg) => log("WV console: ${msg.message}")
           : null,
       onLoadStop: (controller, loadedUrl) async {
-        print("TEST_D 68 $loadCount");
+        final loaded = loadedUrl?.toString();
+        if (loaded != null && processedUrls.contains(loaded)) {
+          log("TEST_D 67 skip already processed $loaded");
+          return;
+        }
+        if (loaded != null) {
+          processedUrls.add(loaded);
+        }
+        log("TEST_D 68 $loadCount $loadedUrl");
         loadCount++;
         try {
           if (loadedUrl?.host == "news.google.com") {
             return;
           }
-          print("TEST_D 69\n");
+          log("TEST_D 69\n");
 
           final article = await _extractReadableArticle(controller);
-          print("TEST_D 70 ${article?.content}");
+          log("TEST_D 70 ${article?.content}");
           if (loadCount == 1) {
             firstArticle = article;
           }
 
           if (!triedReadMoreClick && _looksTruncated(article)) {
             triedReadMoreClick = true;
-            print("TEST_D 71 _tryClickReadMore from now");
+            log("TEST_D 71 _tryClickReadMore from now");
             final clicked = await _tryClickReadMore(controller);
             if (clicked) {
-              print("TEST_D 74 clicked");
+              log("TEST_D 74 clicked");
               return;
             }
           }
 
-          print("TEST_D 73 ${completer.isCompleted}");
+          log("TEST_D 73 ${completer.isCompleted}");
           if (!completer.isCompleted) {
-            print("TEST_D 75 completed");
+            log("TEST_D 75 completed");
             completer.complete(article ?? firstArticle);
           }
         } catch (_) {
@@ -525,7 +535,7 @@ class _WebViewPageState extends State<WebViewPage> {
       }
       return _ExtractedArticle(title: title, content: normalized);
     } else {
-      debugPrint('Readability failed: ${result['error']}');
+      log('Readability failed: ${result['error']}');
     }
 
     return null;
@@ -536,7 +546,7 @@ class _WebViewPageState extends State<WebViewPage> {
       final raw = await controller.evaluateJavascript(
         source: _clickReadMoreJs,
       );
-      print("TEST_D 72 $raw");
+      log("TEST_D 72 $raw");
       final jsonStr = raw is String ? raw : raw?.toString();
       if (jsonStr == null || jsonStr.isEmpty) {
         return false;
@@ -547,7 +557,7 @@ class _WebViewPageState extends State<WebViewPage> {
         return true;
       }
     } catch (e) {
-      debugPrint('Read more click failed: $e');
+      log('Read more click failed: $e');
     }
     return false;
   }
