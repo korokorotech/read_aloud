@@ -273,6 +273,44 @@ class PlayerService extends ChangeNotifier {
     return item.previewText;
   }
 
+  Future<void> playStandaloneArticle({
+    required String url,
+    required String previewText,
+    required String articleText,
+  }) async {
+    await _loadPlaybackPreferences();
+    await _stopPlaybackLoop();
+    final tempItem = NewsItemRecord(
+      id: 'standalone_${DateTime.now().microsecondsSinceEpoch}',
+      setId: '_standalone',
+      url: url,
+      previewText: previewText,
+      articleText: articleText,
+      addedAt: DateTime.now().millisecondsSinceEpoch,
+      orderIndex: 0,
+    );
+    final future = _playStandaloneRecord(tempItem);
+    _playbackFuture = future;
+    unawaited(future);
+  }
+
+  Future<void> _playStandaloneRecord(NewsItemRecord item) async {
+    _stopRequested = false;
+    _isPlaying = true;
+    notifyListeners();
+    try {
+      final played = await _playItem(item);
+      if (!played) {
+        _errorMessage = '読み上げできるテキストがありません。';
+      }
+    } finally {
+      _playbackFuture = null;
+      _isPlaying = false;
+      _stopRequested = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> _loadPlaybackPreferences() async {
     final settings = AppSettings.instance;
     _readPreviewBeforeArticle =

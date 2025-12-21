@@ -133,25 +133,49 @@ class _WebViewPageState extends State<WebViewPage> {
     await context.pushSetDetail(widget.setId);
   }
 
-  Future<void> _handleStartSetPlayback() async {
-    if (_isCheckingSetExists || !_hasExistingSet) {
+  Future<void> _handleReadVisiblePage() async {
+    final controller = _webViewController;
+    if (controller == null) {
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: 'ページを読み込んでいる最中です。少し待ってから再試行してください。',
+      );
       return;
     }
-    final success = await _player.startSetById(
-      widget.setId,
-      fallbackSetName: _setName,
-    );
-    if (!mounted) return;
-    if (success) {
+
+    try {
+      final currentUri = await controller.getUrl();
+      final currentUrl =
+          currentUri?.toString() ?? widget.initialUrl.toString();
+
+      if (!mounted) return;
       showAutoHideSnackBar(
         context,
-        message: 'ニュースセットの再生を開始します。',
+        message: '現在のページを解析しています…',
       );
-    } else {
-      final message = _player.errorMessage ?? '再生を開始できませんでした。';
+
+      final article = await _extractReadableArticle(controller);
+      if (!mounted) return;
+      if (article == null || article.content.trim().isEmpty) {
+        showAutoHideSnackBar(
+          context,
+          message: '本文を取得できませんでした。',
+        );
+        return;
+      }
+
+      final preview = _buildPreviewText(article);
+      await _player.playStandaloneArticle(
+        url: currentUrl,
+        previewText: preview,
+        articleText: article.content,
+      );
+    } catch (e) {
+      if (!mounted) return;
       showAutoHideSnackBar(
         context,
-        message: message,
+        message: '読み上げに失敗しました: $e',
       );
     }
   }
@@ -903,13 +927,10 @@ class _WebViewPageState extends State<WebViewPage> {
                 if (_showActionMenu) const SizedBox(height: 12),
                 _ActionButton(
                   icon: Icons.play_arrow_rounded,
-                  tooltip: '先頭から再生',
-                  onTap: canControlSet
-                      ? () {
-                          unawaited(_handleStartSetPlayback());
-                        }
-                      : null,
-                  enabled: canControlSet,
+                  tooltip: 'このページを読み上げ',
+                  onTap: () {
+                    unawaited(_handleReadVisiblePage());
+                  },
                 ),
                 const SizedBox(height: 10),
                 _ActionButton(
