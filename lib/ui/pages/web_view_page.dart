@@ -632,8 +632,7 @@ class _WebViewPageState extends State<WebViewPage> {
     if (text.length < 200) {
       return true;
     }
-    const hints = ['記事全文を読む', '続きを読む', '続きは', '記事の続き', 'この先は'];
-    final ret = hints.any(text.contains);
+    final ret = _readMoreKeywords.any(text.contains);
     debugPrint("TEST_D 90 _looksTruncated $ret");
     return ret;
   }
@@ -1042,6 +1041,17 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
+const List<String> _readMoreKeywords = [
+  '記事全文',
+  '記事全文を読む',
+  '全文を読む',
+  '続きを読む',
+  'もっと読む',
+  '続きはこちら',
+  '記事の続き',
+  'Read more',
+];
+
 const _readabilityExtractorJs = r'''
 (() => {
   try {
@@ -1071,17 +1081,17 @@ const _readabilityExtractorJs = r'''
 })()
 ''';
 
-const _clickReadMoreJs = r'''
+final _clickReadMoreJs = _buildClickReadMoreJs();
+
+String _buildClickReadMoreJs() {
+  final keywordsJson = jsonEncode(_readMoreKeywords);
+  return '''
 (() => {
   try {
     console.log("TEST_D 101 _clickReadMoreJs start");
-    const KEYWORDS = [
-      '記事全文', '全文', '全文を読む', '記事全文を読む',
-      '続きを読む', 'もっと読む', '続き', '続きはこちら',
-      'Continue', 'Read more', 'More'
-    ];
+    const KEYWORDS = $keywordsJson;
 
-    const norm = (s) => (s || '').replace(/\s+/g, '').trim();
+    const norm = (s) => (s || '').replace(/\\s+/g, '').trim();
 
     const nodes = Array.from(document.querySelectorAll(
       'a,button,[role="button"],input[type="button"],input[type="submit"]'
@@ -1123,3 +1133,4 @@ const _clickReadMoreJs = r'''
   }
 })()
 ''';
+}
