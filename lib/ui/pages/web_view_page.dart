@@ -49,6 +49,8 @@ class _WebViewPageState extends State<WebViewPage> {
   late final Future<UserScript> _readabilityUserScriptFuture;
   bool _hasExistingSet = false;
   bool _isCheckingSetExists = true;
+  static const int _contextMenuBatchSize = 10;
+  String? _lastContextMenuLinkUrl;
 
   @override
   void initState() {
@@ -146,8 +148,7 @@ class _WebViewPageState extends State<WebViewPage> {
 
     try {
       final currentUri = await controller.getUrl();
-      final currentUrl =
-          currentUri?.toString() ?? widget.initialUrl.toString();
+      final currentUrl = currentUri?.toString() ?? widget.initialUrl.toString();
 
       if (!mounted) return;
       showAutoHideSnackBar(
@@ -343,6 +344,230 @@ class _WebViewPageState extends State<WebViewPage> {
     );
   }
 
+  void _handleContextMenuCreate(InAppWebViewHitTestResult hitTestResult) {
+    _logWithSave("TEST_D 110 _handleContextMenuCreate $hitTestResult");
+    final url = hitTestResult.extra;
+    final type = hitTestResult.type;
+    final isLinkType = type == InAppWebViewHitTestResultType.SRC_ANCHOR_TYPE ||
+        type == InAppWebViewHitTestResultType.SRC_IMAGE_ANCHOR_TYPE;
+    if (isLinkType && url != null && url.isNotEmpty) {
+      _lastContextMenuLinkUrl = url;
+      return;
+    }
+    if (url != null && url.isNotEmpty) {
+      final parsed = Uri.tryParse(url);
+      if (parsed != null) {
+        final scheme = parsed.scheme.toLowerCase();
+        if (scheme == 'http' || scheme == 'https') {
+          _lastContextMenuLinkUrl = url;
+          return;
+        }
+      }
+    }
+    _lastContextMenuLinkUrl = null;
+  }
+
+  void _handleContextMenuHide() {
+    _logWithSave("TEST_D 113 _handleContextMenuHide");
+    _lastContextMenuLinkUrl = null;
+  }
+
+  Future<void> _handleAddLinkFromContextMenu() async {
+    _logWithSave("TEST_D 112 _handleAddLinkFromContextMenu");
+    final normalized = await _prepareContextMenuLinkUrl();
+    if (normalized == null) {
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: 'リンクのURLを特定できませんでした。',
+      );
+      return;
+    }
+    await _captureArticle(normalized);
+  }
+
+  Future<void> _handleAddBatchFromContextMenu() async {
+    final controller = _webViewController;
+    if (controller == null) {
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: 'WebView の準備ができていません。',
+      );
+      return;
+    }
+    final normalized = await _prepareContextMenuLinkUrl();
+    if (normalized == null) {
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: 'リンクのURLを特定できませんでした。',
+      );
+      return;
+    }
+    final links = await _collectForwardLinks(
+        controller, normalized, _contextMenuBatchSize);
+    if (links.isEmpty) {
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: 'このリンク以降の項目を取得できませんでした。',
+      );
+      return;
+    }
+    await _captureMultipleArticles(links);
+  }
+
+  Future<String?> _prepareContextMenuLinkUrl() async {
+    _logWithSave(
+        "TEST_D 111 _prepareContextMenuLinkUrl $_lastContextMenuLinkUrl");
+    final raw = _lastContextMenuLinkUrl;
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+    final parsed = Uri.tryParse(raw);
+    if (parsed == null) {
+      return null;
+    }
+    Uri? absolute = parsed;
+    if (parsed.scheme.isEmpty) {
+      final current = await _webViewController?.getUrl();
+      final base = current == null ? null : Uri.tryParse(current.toString());
+      if (base == null) {
+        return null;
+      }
+      absolute = base.resolveUri(parsed);
+    }
+    final scheme = absolute.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https') {
+      return null;
+    }
+    final absoluteUrl = absolute.toString();
+    final normalized = _normalizeUrl(absoluteUrl);
+    return normalized ?? absoluteUrl;
+  }
+
+  Future<List<String>> _collectForwardLinks(
+    InAppWebViewController controller,
+    String targetUrl,
+    int limit,
+  ) async {
+    final encodedTarget = jsonEncode(targetUrl);
+    final script = '''
+(() => {
+  try {
+    const target = $encodedTarget;
+    const limit = $limit;
+    const anchors = Array.from(document.querySelectorAll('a[href]'));
+    const hrefs = anchors.map(a => a.href || '').filter(Boolean);
+    const startIndex = hrefs.indexOf(target);
+    if (startIndex < 0) {
+      return JSON.stringify({ ok: false });
+    }
+    const collected = [];
+    for (let i = startIndex; i < hrefs.length && collected.length < limit; i++) {
+      const href = hrefs[i];
+      if (!href) {
+        continue;
+      }
+      if (!/^https?:\\/\\//i.test(href)) {
+        continue;
+      }
+      collected.push(href);
+    }
+    return JSON.stringify({ ok: true, links: collected });
+  } catch (e) {
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+})()
+''';
+
+    final raw = await controller.evaluateJavascript(source: script);
+    final jsonStr = raw is String ? raw : raw?.toString();
+    if (jsonStr == null || jsonStr.isEmpty) {
+      return [];
+    }
+    final dynamic decoded = jsonDecode(jsonStr);
+    if (decoded is Map<String, dynamic> && decoded['ok'] == true) {
+      final rawLinks = (decoded['links'] as List?) ?? <dynamic>[];
+      return rawLinks.whereType<String>().toList();
+    }
+    return [];
+  }
+
+  Future<void> _captureMultipleArticles(List<String> urls) async {
+    if (urls.isEmpty) {
+      return;
+    }
+    if (!mounted) return;
+    showAutoHideSnackBar(
+      context,
+      message: '${urls.length}件のリンクを解析しています…',
+    );
+    final inserted = <NewsItemRecord>[];
+    var duplicateCount = 0;
+    var failureCount = 0;
+    for (final url in urls) {
+      final normalized = _normalizeUrl(url) ?? url;
+      try {
+        final article = await _extractArticleFromUrl(normalized);
+        if (article == null || article.content.isEmpty) {
+          failureCount++;
+          continue;
+        }
+        final saved = await _saveExtractedArticle(normalized, article);
+        inserted.add(saved);
+        _markSetAsAvailable();
+      } on DuplicateArticleException {
+        duplicateCount++;
+      } catch (_) {
+        failureCount++;
+      }
+    }
+    if (!mounted) return;
+    if (inserted.isEmpty) {
+      final detail = (duplicateCount > 0 || failureCount > 0)
+          ? '（重複$duplicateCount件/失敗$failureCount件）'
+          : '';
+      showAutoHideSnackBar(
+        context,
+        message: 'リンクを追加できませんでした$detail',
+      );
+      return;
+    }
+    showAutoHideSnackBar(
+      context,
+      message:
+          '${inserted.length}件のリンクをキューに追加しました（重複$duplicateCount件/失敗$failureCount件）',
+      duration: const Duration(seconds: 4),
+      action: SnackBarAction(
+        label: 'もとに戻す',
+        onPressed: () {
+          unawaited(_undoBatchInsert(inserted));
+        },
+      ),
+    );
+  }
+
+  Future<void> _undoBatchInsert(List<NewsItemRecord> items) async {
+    try {
+      for (final item in items) {
+        await _newsItemRepository.deleteArticle(item.id);
+      }
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: '追加を取り消しました。',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: '取り消しに失敗しました: $e',
+      );
+    }
+  }
+
   Future<void> _captureArticle(String url) async {
     if (!mounted) return;
     showAutoHideSnackBar(
@@ -461,6 +686,7 @@ class _WebViewPageState extends State<WebViewPage> {
         safeBrowsingEnabled: kDebugMode ? false : true,
         supportMultipleWindows: true,
         javaScriptCanOpenWindowsAutomatically: true,
+        disableLongPressContextMenuOnLinks: true,
       ),
       initialUserScripts: UnmodifiableListView<UserScript>([userScript]),
       onCreateWindow: (controller, createWindowRequest) async {
@@ -896,10 +1122,40 @@ class _WebViewPageState extends State<WebViewPage> {
               mediaPlaybackRequiresUserGesture: false,
               javaScriptEnabled: true,
             ),
+            contextMenu: ContextMenu(
+              settings: ContextMenuSettings(
+                hideDefaultSystemContextMenuItems: true,
+              ),
+              onCreateContextMenu: _handleContextMenuCreate,
+              onHideContextMenu: _handleContextMenuHide,
+              menuItems: [
+                ContextMenuItem(
+                  id: 1,
+                  title: 'リンク先の記事を読み上げに追加',
+                  action: () async {
+                    await _handleAddLinkFromContextMenu();
+                  },
+                ),
+                ContextMenuItem(
+                  id: 2,
+                  title: 'このリンク以降10件を追加',
+                  action: () async {
+                    await _handleAddBatchFromContextMenu();
+                  },
+                ),
+              ],
+            ),
             initialUserScripts:
                 UnmodifiableListView<UserScript>([readabilityScript]),
             onWebViewCreated: (controller) {
               _webViewController = controller;
+            },
+            onLongPressHitTestResult: (controller, hitTestResult) async {
+              var requestFocusNodeHrefResult =
+                  await controller.requestFocusNodeHref();
+              final url = requestFocusNodeHrefResult?.url;
+              final title = requestFocusNodeHrefResult?.title;
+              debugPrint("TEST_D 121 url={$url} type={$title}");
             },
             shouldOverrideUrlLoading: (controller, navigationAction) async {
               final uri = navigationAction.request.url;
