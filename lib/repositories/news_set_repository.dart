@@ -88,6 +88,11 @@ class NewsSetRepository {
     return result.isNotEmpty;
   }
 
+  Future<void> deleteSet(String setId) async {
+    final db = await _database.database;
+    await db.delete('news_sets', where: 'id = ?', whereArgs: [setId]);
+  }
+
   static DateTime _toDateTime(Object? value) {
     final millis = _asInt(value);
     return DateTime.fromMillisecondsSinceEpoch(millis);

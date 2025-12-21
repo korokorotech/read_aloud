@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:read_aloud/entities/news_item_record.dart';
 import 'package:read_aloud/entities/news_set_detail.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
+import 'package:read_aloud/repositories/news_item_repository.dart';
 import 'package:read_aloud/services/player_service.dart';
 import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
 import 'package:read_aloud/ui/pages/article_web_view_page.dart';
@@ -25,6 +26,7 @@ class NewsSetDetailPage extends StatefulWidget {
 
 class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
   final NewsSetRepository _repository = NewsSetRepository();
+  final NewsItemRepository _newsItemRepository = NewsItemRepository();
   final PlayerService _player = PlayerService.instance;
 
   bool _isLoading = true;
@@ -64,16 +66,14 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
                 ),
               ],
             ),
-            actions: kDebugMode
-                ? [
-                    if (_detail != null)
-                      IconButton(
-                        tooltip: 'デバッグ:本文一覧を表示',
-                        icon: const Icon(Icons.bug_report_outlined),
-                        onPressed: _showDebugNewsItems,
-                      ),
-                  ]
-                : null,
+            actions: [
+              if (kDebugMode && _detail != null)
+                IconButton(
+                  tooltip: 'デバッグ:本文一覧を表示',
+                  icon: const Icon(Icons.bug_report_outlined),
+                  onPressed: _showDebugNewsItems,
+                ),
+            ],
           ),
           body: SafeArea(
             child: _isLoading
@@ -85,7 +85,7 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
               : FloatingActionButton.extended(
                   icon: const Icon(Icons.add_link),
                   label: const Text('記事を追加'),
-                  onPressed: () => _openWebViewForSet(_detail!),
+                  onPressed: _handleAddItemToSet,
                 ),
         );
       },
@@ -145,6 +145,7 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
             onTap: () =>
                 unawaited(_player.startWithDetail(detail, startIndex: i)),
             onOpenUrl: () => _openNewsItemUrl(item),
+            onDelete: () => _handleDeleteItem(item),
           ),
         );
         listChildren.add(const SizedBox(height: 12));
@@ -177,6 +178,14 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
         ),
       ],
     );
+  }
+
+  Future<void> _handleAddItemToSet() async {
+    final detail = _detail;
+    if (detail == null) {
+      return;
+    }
+    await _openWebViewForSet(detail);
   }
 
   Future<void> _openWebViewForSet(NewsSetDetail detail) async {
@@ -236,6 +245,47 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleDeleteItem(NewsItemRecord item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('この記事を削除しますか？'),
+          content: Text(
+            '「${item.previewText.isEmpty ? item.url : item.previewText}」をセットから削除します。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('削除する'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    try {
+      await _newsItemRepository.deleteArticle(item.id);
+      if (!mounted) return;
+      showAutoHideSnackBar(context, message: '記事を削除しました。');
+      await _loadDetail(showSpinner: false);
+    } catch (e) {
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: '削除に失敗しました: $e',
+      );
+    }
   }
 
   Future<void> _handleRename() async {
@@ -540,6 +590,7 @@ class _NewsItemCard extends StatelessWidget {
     this.isCurrent = false,
     this.onTap,
     this.onOpenUrl,
+    this.onDelete,
   });
 
   final NewsItemRecord item;
@@ -548,6 +599,7 @@ class _NewsItemCard extends StatelessWidget {
   final bool isCurrent;
   final VoidCallback? onTap;
   final VoidCallback? onOpenUrl;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -565,11 +617,27 @@ class _NewsItemCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                item.previewText,
-                style: theme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.previewText,
+                      style:
+                          theme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (onDelete != null)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: 'この記事を削除',
+                      onPressed: onDelete,
+                      visualDensity: VisualDensity.compact,
+                      splashRadius: 18,
+                    ),
+                ],
               ),
               const SizedBox(height: 4),
               Text(

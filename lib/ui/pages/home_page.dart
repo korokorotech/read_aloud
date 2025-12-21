@@ -77,6 +77,43 @@ class _HomePageState extends State<HomePage> {
     await _loadNewsSets(showSpinner: false);
   }
 
+  Future<void> _handleDeleteSet(NewsSetSummary set) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('ニュースセットを削除'),
+          content: Text('「${set.name}」を削除しますか？ 登録済みの記事も削除されます。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('削除する'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
+    try {
+      await _newsSetRepository.deleteSet(set.id);
+      if (!mounted) return;
+      showAutoHideSnackBar(context, message: '「${set.name}」を削除しました。');
+      await _loadNewsSets(showSpinner: false);
+    } catch (e) {
+      if (!mounted) return;
+      showAutoHideSnackBar(
+        context,
+        message: 'セットを削除できませんでした: $e',
+      );
+    }
+  }
+
   Future<void> _handlePlaySet(NewsSetSummary set) async {
     final success =
         await _player.startSetById(set.id, fallbackSetName: set.name);
@@ -163,6 +200,8 @@ class _HomePageState extends State<HomePage> {
                                                       _handlePlaySet(set),
                                                   onTogglePlay:
                                                       _player.togglePlayPause,
+                                                  onDelete: () =>
+                                                      _handleDeleteSet(set),
                                                   isActive: isActive,
                                                   isPlaying: isPlaying,
                                                   isLoading: isLoadingPlayer,
@@ -396,6 +435,7 @@ class _NewsSetCard extends StatelessWidget {
     required this.onTap,
     required this.onPlay,
     required this.onTogglePlay,
+    required this.onDelete,
     required this.isActive,
     required this.isPlaying,
     required this.isLoading,
@@ -406,6 +446,7 @@ class _NewsSetCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onPlay;
   final VoidCallback onTogglePlay;
+  final VoidCallback onDelete;
   final bool isActive;
   final bool isPlaying;
   final bool isLoading;
@@ -439,11 +480,26 @@ class _NewsSetCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      newsSet.name,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            newsSet.name,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
                           ),
+                        ),
+                        IconButton(
+                          onPressed: onDelete,
+                          tooltip: 'このセットを削除',
+                          icon: const Icon(Icons.delete_outline),
+                          visualDensity: VisualDensity.compact,
+                          splashRadius: 18,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     Text(
