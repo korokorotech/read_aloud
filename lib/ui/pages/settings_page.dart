@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:read_aloud/entities/news_set_add_option.dart';
 import 'package:read_aloud/entities/preferred_news_source.dart';
 import 'package:read_aloud/services/app_settings.dart';
+import 'package:read_aloud/services/player_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -19,6 +20,7 @@ class _SettingsPageState extends State<SettingsPage> {
   NewsSetAddOption _defaultAddOption = NewsSetAddOption.googleNews;
   PreferredNewsSource _preferredNewsSource = PreferredNewsSource.googleNews;
   bool _readPreviewBeforeArticle = true;
+  double _playbackSpeed = 1.0;
 
   @override
   void initState() {
@@ -31,11 +33,13 @@ class _SettingsPageState extends State<SettingsPage> {
     final newsSource = await _settings.getPreferredNewsSource();
     final readPreviewBeforeArticle =
         await _settings.getReadPreviewBeforeArticle();
+    final playbackSpeed = await _settings.getPlaybackSpeed();
     if (!mounted) return;
     setState(() {
       _defaultAddOption = addOption;
       _preferredNewsSource = newsSource;
       _readPreviewBeforeArticle = readPreviewBeforeArticle;
+      _playbackSpeed = playbackSpeed;
       _isLoading = false;
     });
   }
@@ -59,6 +63,13 @@ class _SettingsPageState extends State<SettingsPage> {
       _readPreviewBeforeArticle = value;
     });
     await _settings.setReadPreviewBeforeArticle(value);
+  }
+
+  Future<void> _updatePlaybackSpeed(double speed) async {
+    setState(() {
+      _playbackSpeed = speed;
+    });
+    await PlayerService.instance.setPlaybackSpeed(speed);
   }
 
   @override
@@ -144,9 +155,41 @@ class _SettingsPageState extends State<SettingsPage> {
                     value: _readPreviewBeforeArticle,
                     onChanged: _updateReadPreviewBeforeArticle,
                   ),
+                  const SizedBox(height: 24),
+                  DropdownButtonFormField<double>(
+                    value: _playbackSpeed,
+                    decoration: const InputDecoration(
+                      labelText: '再生速度',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: PlayerService.playbackSpeedOptions
+                        .map(
+                          (speed) => DropdownMenuItem(
+                            value: speed,
+                            child: Text(_formatSpeed(speed)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        _updatePlaybackSpeed(value);
+                      }
+                    },
+                  ),
                 ],
               ),
       ),
     );
+  }
+
+  String _formatSpeed(double speed) {
+    if (speed % 1 == 0) {
+      return '${speed.toStringAsFixed(0)}x';
+    }
+    final trimmed = speed
+        .toStringAsFixed(2)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
+    return '${trimmed}x';
   }
 }

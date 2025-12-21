@@ -11,6 +11,7 @@ class AppSettings {
   static const _keyPreferredNewsSource = 'preferred_news_source';
   static const _keyReadPreviewBeforeArticle =
       'read_preview_before_article_enabled';
+  static const _keyPlaybackSpeed = 'playback_speed';
 
   Future<NewsSetAddOption> getDefaultAddOption() async {
     final prefs = await SharedPreferences.getInstance();
@@ -48,5 +49,15 @@ class AppSettings {
   Future<void> setReadPreviewBeforeArticle(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyReadPreviewBeforeArticle, enabled);
+  }
+
+  Future<double> getPlaybackSpeed() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_keyPlaybackSpeed) ?? 1.0;
+  }
+
+  Future<void> setPlaybackSpeed(double speed) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyPlaybackSpeed, speed);
   }
 }

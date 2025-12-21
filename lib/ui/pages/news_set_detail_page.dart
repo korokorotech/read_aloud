@@ -166,6 +166,10 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
             player: _player,
             isActiveSet: isActiveSet,
             onStartSet: () => unawaited(_player.startWithDetail(detail)),
+            playbackSpeed: _player.playbackSpeed,
+            onSpeedChanged: (speed) {
+              unawaited(_player.setPlaybackSpeed(speed));
+            },
           ),
         ),
         const SizedBox(height: 12),
@@ -511,12 +515,16 @@ class _PlaybackSection extends StatelessWidget {
     required this.player,
     required this.isActiveSet,
     required this.onStartSet,
+    required this.playbackSpeed,
+    required this.onSpeedChanged,
   });
 
   final NewsSetDetail detail;
   final PlayerService player;
   final bool isActiveSet;
   final VoidCallback onStartSet;
+  final double playbackSpeed;
+  final ValueChanged<double> onSpeedChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -588,8 +596,44 @@ class _PlaybackSection extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.speed, size: 18),
+            const SizedBox(width: 8),
+            DropdownButton<double>(
+              value: playbackSpeed,
+              underline: const SizedBox(),
+              items: PlayerService.playbackSpeedOptions
+                  .map(
+                    (speed) => DropdownMenuItem(
+                      value: speed,
+                      child: Text(_formatSpeed(speed)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  onSpeedChanged(value);
+                }
+              },
+            ),
+          ],
+        ),
       ],
     );
+  }
+
+  String _formatSpeed(double speed) {
+    if (speed % 1 == 0) {
+      return '${speed.toStringAsFixed(0)}x';
+    }
+    final trimmed = speed
+        .toStringAsFixed(2)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
+    return '${trimmed}x';
   }
 }
 

@@ -10,10 +10,8 @@ import 'package:read_aloud/services/app_settings.dart';
 class PlayerService extends ChangeNotifier {
   PlayerService._() {
     _setupTts();
+    unawaited(_loadPlaybackPreferences());
   }
-
-  static const CHUNK_END_CHECK_START_LENGTH = 500;
-  static const CHUNK_MAX_LENGTH = 1000;
 
   static final PlayerService instance = PlayerService._();
 
@@ -51,6 +49,17 @@ class PlayerService extends ChangeNotifier {
     '』',
   };
   bool _readPreviewBeforeArticle = true;
+  double _playbackSpeed = 1.0;
+
+  static const List<double> playbackSpeedOptions = [
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.5,
+    1.75,
+    2.0,
+  ];
 
   bool get isLoading => _isLoading;
   bool get isPlaying => _isPlaying;
@@ -59,6 +68,7 @@ class PlayerService extends ChangeNotifier {
   int get currentIndex => _currentIndex;
   List<NewsItemRecord> get currentItems => List.unmodifiable(_items);
   String? get errorMessage => _errorMessage;
+  double get playbackSpeed => _playbackSpeed;
 
   bool get canPlayNext =>
       _items.isNotEmpty && _currentIndex < _items.length - 1;
@@ -174,6 +184,16 @@ class PlayerService extends ChangeNotifier {
 
   Future<void> stop() async {
     await _stopPlaybackLoop();
+  }
+
+  Future<void> setPlaybackSpeed(double speed) async {
+    if ((speed - _playbackSpeed).abs() < 0.0001) {
+      return;
+    }
+    _playbackSpeed = speed;
+    await _flutterTts.setSpeechRate(speed);
+    notifyListeners();
+    await AppSettings.instance.setPlaybackSpeed(speed);
   }
 
   Future<void> _startPlaybackLoop() async {
@@ -313,16 +333,19 @@ class PlayerService extends ChangeNotifier {
 
   Future<void> _loadPlaybackPreferences() async {
     final settings = AppSettings.instance;
-    _readPreviewBeforeArticle =
-        await settings.getReadPreviewBeforeArticle();
+    _readPreviewBeforeArticle = await settings.getReadPreviewBeforeArticle();
+    final storedSpeed = await settings.getPlaybackSpeed();
+    if ((storedSpeed - _playbackSpeed).abs() >= 0.0001) {
+      _playbackSpeed = storedSpeed;
+      await _flutterTts.setSpeechRate(_playbackSpeed);
+      notifyListeners();
+    }
   }
 
   Future<bool> _playItem(NewsItemRecord item) async {
     final preview = item.previewText.trim();
     final article = item.articleText?.trim() ?? '';
-    if (_readPreviewBeforeArticle &&
-        preview.isNotEmpty &&
-        article.isNotEmpty) {
+    if (_readPreviewBeforeArticle && preview.isNotEmpty && article.isNotEmpty) {
       final previewPlayed = await _speakText(preview);
       if (_stopRequested) {
         return previewPlayed;
