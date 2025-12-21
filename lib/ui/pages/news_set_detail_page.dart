@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:read_aloud/entities/news_item_record.dart';
 import 'package:read_aloud/entities/news_set_detail.dart';
@@ -63,6 +64,16 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
                 ),
               ],
             ),
+            actions: kDebugMode
+                ? [
+                    if (_detail != null)
+                      IconButton(
+                        tooltip: 'デバッグ:本文一覧を表示',
+                        icon: const Icon(Icons.bug_report_outlined),
+                        onPressed: _showDebugNewsItems,
+                      ),
+                  ]
+                : null,
           ),
           body: SafeArea(
             child: _isLoading
@@ -78,6 +89,18 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
                 ),
         );
       },
+    );
+  }
+
+  Future<void> _showDebugNewsItems() async {
+    final detail = _detail;
+    if (detail == null) {
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _NewsItemsDebugSheet(items: detail.items),
     );
   }
 
@@ -301,6 +324,96 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
   }
 
   String _extractDomain(String url) => Uri.tryParse(url)?.host ?? 'unknown';
+}
+
+class _NewsItemsDebugSheet extends StatelessWidget {
+  const _NewsItemsDebugSheet({required this.items});
+
+  final List<NewsItemRecord> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final height = MediaQuery.of(context).size.height * 0.85;
+    return SafeArea(
+      child: SizedBox(
+        height: height,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'デバッグ: 本文一覧',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: '閉じる',
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: items.isEmpty
+                  ? const Center(
+                      child: Text('ニュースアイテムがありません'),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        final title = item.previewText.isEmpty
+                            ? item.url
+                            : item.previewText;
+                        final rawArticle = item.articleText ?? '';
+                        final hasArticle = rawArticle.trim().isNotEmpty;
+                        final article = hasArticle ? rawArticle : '(本文なし)';
+                        return Card(
+                          child: ExpansionTile(
+                            title: Text(
+                              '${index + 1}. $title',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              item.url,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                child: SelectableText(
+                                  article,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _EmptyItemsState extends StatelessWidget {
