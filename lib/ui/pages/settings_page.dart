@@ -89,36 +89,42 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                   ),
                   const SizedBox(height: 24),
-                  DropdownButtonFormField<NewsSetAddOption>(
-                    value: _defaultAddOption,
-                    decoration: const InputDecoration(
-                      labelText: '新規作成時のデフォルト追加方法',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: NewsSetAddOption.values
-                        .map(
-                          (option) => DropdownMenuItem(
-                            value: option,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(option.label),
-                                const SizedBox(height: 4),
-                                Text(
-                                  option.description,
-                                  style: theme.textTheme.bodySmall
-                                      ?.copyWith(color: Colors.grey[600]),
+                  DropdownButtonHideUnderline(
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: '新規作成時のデフォルト追加方法',
+                        border: OutlineInputBorder(),
+                      ),
+                      child: DropdownButton<NewsSetAddOption>(
+                        isExpanded: true,
+                        value: _defaultAddOption,
+                        items: NewsSetAddOption.values
+                            .map(
+                              (option) => DropdownMenuItem(
+                                value: option,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(option.label),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      option.description,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: Colors.grey[600]),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        _updateDefaultOption(value);
-                      }
-                    },
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            _updateDefaultOption(value);
+                          }
+                        },
+                      ),
+                    ),
                   ),
                 ],
               ),

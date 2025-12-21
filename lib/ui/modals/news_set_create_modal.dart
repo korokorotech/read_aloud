@@ -156,53 +156,48 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
-              DropdownButtonFormField<NewsSetAddOption>(
-                initialValue: _selectedOption,
-                isExpanded: true,
-                items: NewsSetAddOption.values
-                    .map(
-                      (option) => DropdownMenuItem(
-                        value: option,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              option.label,
+              DropdownButtonHideUnderline(
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: '追加方法',
+                    border: OutlineInputBorder(),
+                  ),
+                  child: DropdownButton<NewsSetAddOption>(
+                    value: _selectedOption,
+                    isExpanded: true,
+                    items: NewsSetAddOption.values
+                        .map(
+                          (option) => DropdownMenuItem(
+                            value: option,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(option.label),
+                                const SizedBox(height: 4),
+                                Text(
+                                  option.description,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: Colors.grey[600]),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              option.description,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: Colors.grey[600]),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                    .toList(),
-                decoration: const InputDecoration(
-                  labelText: '追加方法',
-                  border: OutlineInputBorder(),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (option) {
+                      if (option == null) return;
+                      setState(() {
+                        _selectedOption = option;
+                        if (!_requiresUrl) {
+                          _urlErrorText = null;
+                        }
+                      });
+                    },
+                  ),
                 ),
-                selectedItemBuilder: (context) => NewsSetAddOption.values
-                    .map(
-                      (option) => Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(option.label),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (option) {
-                  if (option == null) return;
-                  setState(() {
-                    _selectedOption = option;
-                    if (!_requiresUrl) {
-                      _urlErrorText = null;
-                    }
-                  });
-                },
               ),
               if (_showsKeywordField) ...[
                 const SizedBox(height: 16),
