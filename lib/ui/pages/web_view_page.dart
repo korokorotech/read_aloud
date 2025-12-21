@@ -1003,7 +1003,7 @@ class _WebViewPageState extends State<WebViewPage> {
         .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '\n')
         // 連続する改行を1つに
         .replaceAll(RegExp(r'\n\s*\n+'), '\n')
-        .replaceAll(RegExp(r'\t\s*\t+'), ' ')
+        .replaceAll(RegExp(r'\t+'), ' ')
         .trim();
   }
 
