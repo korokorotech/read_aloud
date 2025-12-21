@@ -455,12 +455,12 @@ class _WebViewPageState extends State<WebViewPage> {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.library_add),
-                title: const Text('リンク先の記事を読み上げに追加'),
+                title: const Text('リンク先を読み上げに追加'),
                 onTap: () => Navigator.of(context).pop(_LinkAction.addSingle),
               ),
               ListTile(
                 leading: const Icon(Icons.format_list_numbered),
-                title: const Text('項目より後の10件を読み上げに追加'),
+                title: const Text('選択以降の10件を読み上げに追加'),
                 onTap: () => Navigator.of(context).pop(_LinkAction.addBatch),
               ),
             ],
@@ -481,23 +481,109 @@ class _WebViewPageState extends State<WebViewPage> {
   try {
     const target = $encodedTarget;
     const limit = $limit;
-    const anchors = Array.from(document.querySelectorAll('a[href]'));
-    const hrefs = anchors.map(a => a.href || '').filter(Boolean);
-    const startIndex = hrefs.indexOf(target);
-    if (startIndex < 0) {
-      return JSON.stringify({ ok: false });
-    }
-    const collected = [];
-    for (let i = startIndex; i < hrefs.length && collected.length < limit; i++) {
-      const href = hrefs[i];
-      if (!href) {
-        continue;
+    const AD_KEYWORDS = ['広告'];
+    const LIST_ITEM_SELECTOR = 'li,[role="listitem"],article';
+
+    const norm = (s) => (s || '').replace(/\\s+/g, '').trim();
+    const hasAdLabel = (el) => {
+      if (!el) return false;
+      const text = norm(el.textContent || '');
+      if (!text || text.length > 20) {
+        return false;
       }
+      return AD_KEYWORDS.some((k) => text.includes(norm(k)));
+    };
+
+    const listItemCache = new WeakMap();
+    const adListItems = new WeakSet();
+    const cleanListItems = new WeakSet();
+
+    const getListItem = (anchor) => {
+      if (!anchor) return null;
+      if (listItemCache.has(anchor)) {
+        return listItemCache.get(anchor);
+      }
+      const container = anchor.closest ? anchor.closest(LIST_ITEM_SELECTOR) : null;
+      listItemCache.set(anchor, container);
+      return container;
+    };
+
+    const markListItem = (listItem, isAd) => {
+      if (!listItem) return;
+      if (isAd) {
+        adListItems.add(listItem);
+        cleanListItems.delete(listItem);
+      } else {
+        cleanListItems.add(listItem);
+        adListItems.delete(listItem);
+      }
+    };
+
+    const listItemHasAdLabel = (listItem) => {
+      if (!listItem) return false;
+      if (adListItems.has(listItem)) return true;
+      if (cleanListItems.has(listItem)) return false;
+      if (hasAdLabel(listItem)) {
+        markListItem(listItem, true);
+        return true;
+      }
+      const descendants = listItem.querySelectorAll('*');
+      for (const node of descendants) {
+        if (hasAdLabel(node)) {
+          markListItem(listItem, true);
+          return true;
+        }
+      }
+      markListItem(listItem, false);
+      return false;
+    };
+
+    const isInAdContainer = (anchor) => {
+      const listItem = getListItem(anchor);
+      if (!listItem) {
+        return false;
+      }
+      return listItemHasAdLabel(listItem);
+    };
+
+    const anchors = Array.from(document.querySelectorAll('a[href]')).filter((a) => {
+      const href = a.href || '';
+      if (!href) return false;
       if (!/^https?:\\/\\//i.test(href)) {
-        continue;
+        return false;
       }
-      collected.push(href);
+      if (hasAdLabel(a)) {
+        return false;
+      }
+      if (isInAdContainer(a)) {
+        return false;
+      }
+      return true;
+    });
+
+    let startAnchor = document.activeElement;
+    if (startAnchor && startAnchor.tagName !== 'A') {
+      startAnchor = startAnchor.closest ? startAnchor.closest('a[href]') : null;
     }
+    if (!startAnchor && target) {
+      startAnchor = anchors.find((a) => (a.href || '') === target) || null;
+    }
+    if (!startAnchor) {
+      return JSON.stringify({ ok: false, reason: 'no active anchor' });
+    }
+    let startIndex = anchors.findIndex((a) => a === startAnchor);
+    if (startIndex < 0 && target) {
+      startIndex = anchors.findIndex((a) => (a.href || '') === target);
+    }
+    if (startIndex < 0) {
+      return JSON.stringify({ ok: false, reason: 'start filtered out' });
+    }
+
+    const collected = [];
+    for (let i = startIndex; i < anchors.length && collected.length < limit; i++) {
+      collected.push(anchors[i].href);
+    }
+
     return JSON.stringify({ ok: true, links: collected });
   } catch (e) {
     return JSON.stringify({ ok: false, error: String(e) });
