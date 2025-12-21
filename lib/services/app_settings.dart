@@ -9,6 +9,8 @@ class AppSettings {
 
   static const _keyDefaultAddOption = 'default_add_option';
   static const _keyPreferredNewsSource = 'preferred_news_source';
+  static const _keyReadPreviewBeforeArticle =
+      'read_preview_before_article_enabled';
 
   Future<NewsSetAddOption> getDefaultAddOption() async {
     final prefs = await SharedPreferences.getInstance();
@@ -36,5 +38,15 @@ class AppSettings {
   Future<void> setPreferredNewsSource(PreferredNewsSource source) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyPreferredNewsSource, source.name);
+  }
+
+  Future<bool> getReadPreviewBeforeArticle() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyReadPreviewBeforeArticle) ?? true;
+  }
+
+  Future<void> setReadPreviewBeforeArticle(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyReadPreviewBeforeArticle, enabled);
   }
 }

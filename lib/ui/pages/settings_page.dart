@@ -18,6 +18,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _isLoading = true;
   NewsSetAddOption _defaultAddOption = NewsSetAddOption.googleNews;
   PreferredNewsSource _preferredNewsSource = PreferredNewsSource.googleNews;
+  bool _readPreviewBeforeArticle = true;
 
   @override
   void initState() {
@@ -28,10 +29,13 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _load() async {
     final addOption = await _settings.getDefaultAddOption();
     final newsSource = await _settings.getPreferredNewsSource();
+    final readPreviewBeforeArticle =
+        await _settings.getReadPreviewBeforeArticle();
     if (!mounted) return;
     setState(() {
       _defaultAddOption = addOption;
       _preferredNewsSource = newsSource;
+      _readPreviewBeforeArticle = readPreviewBeforeArticle;
       _isLoading = false;
     });
   }
@@ -48,6 +52,13 @@ class _SettingsPageState extends State<SettingsPage> {
       _preferredNewsSource = source;
     });
     await _settings.setPreferredNewsSource(source);
+  }
+
+  Future<void> _updateReadPreviewBeforeArticle(bool value) async {
+    setState(() {
+      _readPreviewBeforeArticle = value;
+    });
+    await _settings.setReadPreviewBeforeArticle(value);
   }
 
   @override
@@ -69,7 +80,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<PreferredNewsSource>(
-                    value: _preferredNewsSource,
+                    initialValue: _preferredNewsSource,
                     decoration: const InputDecoration(
                       labelText: 'ニュースから追加のサイト',
                       border: OutlineInputBorder(),
@@ -125,6 +136,13 @@ class _SettingsPageState extends State<SettingsPage> {
                         },
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 24),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('本文の前にタイトルを読み上げ'),
+                    value: _readPreviewBeforeArticle,
+                    onChanged: _updateReadPreviewBeforeArticle,
                   ),
                 ],
               ),

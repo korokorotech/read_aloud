@@ -5,6 +5,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:read_aloud/entities/news_item_record.dart';
 import 'package:read_aloud/entities/news_set_detail.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
+import 'package:read_aloud/services/app_settings.dart';
 
 class PlayerService extends ChangeNotifier {
   PlayerService._() {
@@ -29,6 +30,7 @@ class PlayerService extends ChangeNotifier {
   Future<void>? _playbackFuture;
   bool _stopRequested = false;
   static const _interItemSilence = Duration(seconds: 1);
+  static const _preArticleDelay = Duration(seconds: 1);
   static const _chunkEndCheckStartLength = 25;
   static const _chunkMaxLength = 500;
   static const _chunkDelimiters = {
@@ -48,6 +50,7 @@ class PlayerService extends ChangeNotifier {
     '」',
     '』',
   };
+  bool _readPreviewBeforeArticle = true;
 
   bool get isLoading => _isLoading;
   bool get isPlaying => _isPlaying;
@@ -117,6 +120,7 @@ class PlayerService extends ChangeNotifier {
       return;
     }
 
+    await _loadPlaybackPreferences();
     await _stopPlaybackLoop();
     _currentSetId = detail.id;
     _currentSetName = detail.name;
@@ -211,26 +215,14 @@ class PlayerService extends ChangeNotifier {
     try {
       while (!_stopRequested && _currentIndex < _items.length) {
         final item = _items[_currentIndex];
-        final text = _resolveTextForItem(item);
-        final chunks = _splitIntoChunks(text);
-        if (chunks.isEmpty) {
+        final played = await _playItem(item);
+        if (_stopRequested) break;
+        if (!played) {
           if (!_advanceToNextItem()) {
             break;
           }
           continue;
         }
-        for (final chunk in chunks) {
-          if (_stopRequested) break;
-          try {
-            await _flutterTts.speak(chunk);
-          } catch (e) {
-            _errorMessage = 'TTSエラー: $e';
-            _stopRequested = true;
-            break;
-          }
-          if (_stopRequested) break;
-        }
-        if (_stopRequested) break;
         await _waitBeforeAdvancing();
         if (_stopRequested) break;
         if (!_advanceToNextItem()) {
@@ -246,10 +238,18 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> _waitBeforeAdvancing() async {
+    await _waitWithStopCheck(_interItemSilence);
+  }
+
+  Future<void> _waitBeforeArticle() async {
+    await _waitWithStopCheck(_preArticleDelay);
+  }
+
+  Future<void> _waitWithStopCheck(Duration duration) async {
     const tick = Duration(milliseconds: 100);
     var elapsed = Duration.zero;
-    while (!_stopRequested && elapsed < _interItemSilence) {
-      final remaining = _interItemSilence - elapsed;
+    while (!_stopRequested && elapsed < duration) {
+      final remaining = duration - elapsed;
       final delay = remaining < tick ? remaining : tick;
       await Future.delayed(delay);
       elapsed += delay;
@@ -271,6 +271,55 @@ class PlayerService extends ChangeNotifier {
       return article;
     }
     return item.previewText;
+  }
+
+  Future<void> _loadPlaybackPreferences() async {
+    final settings = AppSettings.instance;
+    _readPreviewBeforeArticle =
+        await settings.getReadPreviewBeforeArticle();
+  }
+
+  Future<bool> _playItem(NewsItemRecord item) async {
+    final preview = item.previewText.trim();
+    final article = item.articleText?.trim() ?? '';
+    if (_readPreviewBeforeArticle &&
+        preview.isNotEmpty &&
+        article.isNotEmpty) {
+      final previewPlayed = await _speakText(preview);
+      if (_stopRequested) {
+        return previewPlayed;
+      }
+      if (previewPlayed) {
+        await _waitBeforeArticle();
+      }
+      if (_stopRequested) {
+        return previewPlayed;
+      }
+      final articlePlayed = await _speakText(article);
+      return previewPlayed || articlePlayed;
+    }
+
+    final text = _resolveTextForItem(item);
+    return await _speakText(text);
+  }
+
+  Future<bool> _speakText(String text) async {
+    final chunks = _splitIntoChunks(text);
+    if (chunks.isEmpty) {
+      return false;
+    }
+    for (final chunk in chunks) {
+      if (_stopRequested) break;
+      try {
+        await _flutterTts.speak(chunk);
+      } catch (e) {
+        _errorMessage = 'TTSエラー: $e';
+        _stopRequested = true;
+        break;
+      }
+      if (_stopRequested) break;
+    }
+    return true;
   }
 
   List<String> _splitIntoChunks(String text) {
