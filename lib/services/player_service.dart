@@ -77,7 +77,9 @@ class PlayerService extends ChangeNotifier {
   Future<void> _setupTts() async {
     await _flutterTts.setSharedInstance(true);
     await _flutterTts.setLanguage('ja-JP');
-    await _flutterTts.setSpeechRate(1);
+    final storedSpeed = await AppSettings.instance.getPlaybackSpeed();
+    _playbackSpeed = storedSpeed;
+    await _flutterTts.setSpeechRate(_playbackSpeed);
     await _flutterTts.awaitSpeakCompletion(true);
     _flutterTts.setErrorHandler((msg) {
       _stopRequested = true;

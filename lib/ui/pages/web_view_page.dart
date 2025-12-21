@@ -1444,6 +1444,7 @@ class _ActionButton extends StatelessWidget {
 
 const List<String> _readMoreKeywords = [
   '記事全文',
+  '記事を読む',
   '記事全文を読む',
   '全文を読む',
   '続きを読む',
