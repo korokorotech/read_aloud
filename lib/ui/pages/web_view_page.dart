@@ -447,8 +447,9 @@ class _WebViewPageState extends State<WebViewPage> {
         }
         return false;
       },
-      onConsoleMessage:
-          kDebugMode ? (controller, msg) => _logWithSave("WV console: ${msg.message}") : null,
+      onConsoleMessage: kDebugMode
+          ? (controller, msg) => _logWithSave("WV console: ${msg.message}")
+          : null,
       onLoadStop: (controller, loadedUrl) async {
         final loaded = loadedUrl?.toString();
         if (loaded != null && processedUrls.contains(loaded)) {
@@ -526,6 +527,8 @@ class _WebViewPageState extends State<WebViewPage> {
     }
 
     final Map<String, dynamic> result = jsonDecode(jsonStr);
+    _logWithSave("TEST_D 91 _extractReadableArticle $result");
+
     if (result['ok'] == true) {
       final title = (result['title'] as String?)?.trim();
       final html = result['html'] as String?;
@@ -561,12 +564,12 @@ class _WebViewPageState extends State<WebViewPage> {
         source: _clickReadMoreJs,
       );
       final jsonStr = raw is String ? raw : raw?.toString();
-      _logWithSave("TEST_D 72 $raw");
       if (jsonStr == null || jsonStr.isEmpty) {
         return false;
       }
 
       final Map<String, dynamic> result = jsonDecode(jsonStr);
+      _logWithSave("TEST_D 72 _tryClickReadMore $result");
       if (result['ok'] == true && result['clicked'] == true) {
         return true;
       }
@@ -630,7 +633,9 @@ class _WebViewPageState extends State<WebViewPage> {
       return true;
     }
     const hints = ['記事全文を読む', '続きを読む', '続きは', '記事の続き', 'この先は'];
-    return hints.any(text.contains);
+    final ret = hints.any(text.contains);
+    debugPrint("TEST_D 90 _looksTruncated $ret");
+    return ret;
   }
 
   String _extractMainTextFromReadabilityHtml(String html) {
@@ -642,7 +647,9 @@ class _WebViewPageState extends State<WebViewPage> {
       return '';
     }
 
-    root.querySelectorAll('header, nav, aside, footer').forEach((e) => e.remove());
+    root
+        .querySelectorAll('header, nav, aside, footer')
+        .forEach((e) => e.remove());
     root.querySelectorAll('figcaption').forEach((e) => e.remove());
     root.querySelectorAll('#emotion-list').forEach((e) => e.remove());
 
@@ -684,9 +691,9 @@ class _WebViewPageState extends State<WebViewPage> {
       }
 
       final linkTextLen = p.querySelectorAll('a').fold<int>(
-        0,
-        (sum, a) => sum + _normalizeSpaces(a.text).length,
-      );
+            0,
+            (sum, a) => sum + _normalizeSpaces(a.text).length,
+          );
       final totalLen = text.length;
       final linkDensity = totalLen == 0 ? 0.0 : linkTextLen / totalLen;
       if (linkDensity > 0.60) {
