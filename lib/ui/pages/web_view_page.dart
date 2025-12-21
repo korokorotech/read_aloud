@@ -50,7 +50,7 @@ class _WebViewPageState extends State<WebViewPage> {
   bool _hasExistingSet = false;
   bool _isCheckingSetExists = true;
   static const int _contextMenuBatchSize = 10;
-  String? _lastContextMenuLinkUrl;
+  _PreparedLink? _pendingLongPressLink;
 
   @override
   void initState() {
@@ -344,38 +344,10 @@ class _WebViewPageState extends State<WebViewPage> {
     );
   }
 
-  void _handleContextMenuCreate(InAppWebViewHitTestResult hitTestResult) {
-    _logWithSave("TEST_D 110 _handleContextMenuCreate $hitTestResult");
-    final url = hitTestResult.extra;
-    final type = hitTestResult.type;
-    final isLinkType = type == InAppWebViewHitTestResultType.SRC_ANCHOR_TYPE ||
-        type == InAppWebViewHitTestResultType.SRC_IMAGE_ANCHOR_TYPE;
-    if (isLinkType && url != null && url.isNotEmpty) {
-      _lastContextMenuLinkUrl = url;
-      return;
-    }
-    if (url != null && url.isNotEmpty) {
-      final parsed = Uri.tryParse(url);
-      if (parsed != null) {
-        final scheme = parsed.scheme.toLowerCase();
-        if (scheme == 'http' || scheme == 'https') {
-          _lastContextMenuLinkUrl = url;
-          return;
-        }
-      }
-    }
-    _lastContextMenuLinkUrl = null;
-  }
-
-  void _handleContextMenuHide() {
-    _logWithSave("TEST_D 113 _handleContextMenuHide");
-    _lastContextMenuLinkUrl = null;
-  }
-
   Future<void> _handleAddLinkFromContextMenu() async {
-    _logWithSave("TEST_D 112 _handleAddLinkFromContextMenu");
-    final normalized = await _prepareContextMenuLinkUrl();
-    if (normalized == null) {
+    final link = _pendingLongPressLink;
+    _pendingLongPressLink = null;
+    if (link == null) {
       if (!mounted) return;
       showAutoHideSnackBar(
         context,
@@ -383,10 +355,12 @@ class _WebViewPageState extends State<WebViewPage> {
       );
       return;
     }
-    await _captureArticle(normalized);
+    await _captureArticle(link.normalizedUrl);
   }
 
   Future<void> _handleAddBatchFromContextMenu() async {
+    final link = _pendingLongPressLink;
+    _pendingLongPressLink = null;
     final controller = _webViewController;
     if (controller == null) {
       if (!mounted) return;
@@ -396,8 +370,7 @@ class _WebViewPageState extends State<WebViewPage> {
       );
       return;
     }
-    final normalized = await _prepareContextMenuLinkUrl();
-    if (normalized == null) {
+    if (link == null) {
       if (!mounted) return;
       showAutoHideSnackBar(
         context,
@@ -406,7 +379,10 @@ class _WebViewPageState extends State<WebViewPage> {
       return;
     }
     final links = await _collectForwardLinks(
-        controller, normalized, _contextMenuBatchSize);
+      controller,
+      link.anchorUrl,
+      _contextMenuBatchSize,
+    );
     if (links.isEmpty) {
       if (!mounted) return;
       showAutoHideSnackBar(
@@ -418,20 +394,20 @@ class _WebViewPageState extends State<WebViewPage> {
     await _captureMultipleArticles(links);
   }
 
-  Future<String?> _prepareContextMenuLinkUrl() async {
-    _logWithSave(
-        "TEST_D 111 _prepareContextMenuLinkUrl $_lastContextMenuLinkUrl");
-    final raw = _lastContextMenuLinkUrl;
-    if (raw == null || raw.isEmpty) {
+  Future<_PreparedLink?> _prepareLongPressLink(
+    InAppWebViewController controller,
+    String rawUrl,
+  ) async {
+    if (rawUrl.isEmpty) {
       return null;
     }
-    final parsed = Uri.tryParse(raw);
+    final parsed = Uri.tryParse(rawUrl);
     if (parsed == null) {
       return null;
     }
     Uri? absolute = parsed;
     if (parsed.scheme.isEmpty) {
-      final current = await _webViewController?.getUrl();
+      final current = await controller.getUrl();
       final base = current == null ? null : Uri.tryParse(current.toString());
       if (base == null) {
         return null;
@@ -443,8 +419,55 @@ class _WebViewPageState extends State<WebViewPage> {
       return null;
     }
     final absoluteUrl = absolute.toString();
-    final normalized = _normalizeUrl(absoluteUrl);
-    return normalized ?? absoluteUrl;
+    final normalized = _normalizeUrl(absoluteUrl) ?? absoluteUrl;
+    return _PreparedLink(anchorUrl: absoluteUrl, normalizedUrl: normalized);
+  }
+
+  Future<_LinkAction?> _showLinkActionSheet({
+    required String url,
+    String? title,
+  }) async {
+    if (!mounted) return null;
+    final theme = Theme.of(context);
+    final trimmedTitle = title?.trim();
+    final label =
+        trimmedTitle != null && trimmedTitle.isNotEmpty ? trimmedTitle : url;
+    return showModalBottomSheet<_LinkAction>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ListTile(
+                dense: true,
+                title: Text(
+                  label,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                subtitle: Text(
+                  url,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.library_add),
+                title: const Text('リンク先の記事を読み上げに追加'),
+                onTap: () => Navigator.of(context).pop(_LinkAction.addSingle),
+              ),
+              ListTile(
+                leading: const Icon(Icons.format_list_numbered),
+                title: const Text('項目より後の10件を読み上げに追加'),
+                onTap: () => Navigator.of(context).pop(_LinkAction.addBatch),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<List<String>> _collectForwardLinks(
@@ -977,9 +1000,9 @@ class _WebViewPageState extends State<WebViewPage> {
         // 全角スペース
         .replaceAll('\u3000', ' ')
         // ゼロ幅文字
-        .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '')
+        .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '\n')
         // 連続する改行を1つに
-        .replaceAll(RegExp(r'\n\s*\n+'), '')
+        .replaceAll(RegExp(r'\n\s*\n+'), '\n')
         .replaceAll(RegExp(r'\t'), '')
         .trim();
   }
@@ -1122,40 +1145,40 @@ class _WebViewPageState extends State<WebViewPage> {
               mediaPlaybackRequiresUserGesture: false,
               javaScriptEnabled: true,
             ),
-            contextMenu: ContextMenu(
-              settings: ContextMenuSettings(
-                hideDefaultSystemContextMenuItems: true,
-              ),
-              onCreateContextMenu: _handleContextMenuCreate,
-              onHideContextMenu: _handleContextMenuHide,
-              menuItems: [
-                ContextMenuItem(
-                  id: 1,
-                  title: 'リンク先の記事を読み上げに追加',
-                  action: () async {
-                    await _handleAddLinkFromContextMenu();
-                  },
-                ),
-                ContextMenuItem(
-                  id: 2,
-                  title: 'このリンク以降10件を追加',
-                  action: () async {
-                    await _handleAddBatchFromContextMenu();
-                  },
-                ),
-              ],
-            ),
             initialUserScripts:
                 UnmodifiableListView<UserScript>([readabilityScript]),
             onWebViewCreated: (controller) {
               _webViewController = controller;
             },
             onLongPressHitTestResult: (controller, hitTestResult) async {
-              var requestFocusNodeHrefResult =
-                  await controller.requestFocusNodeHref();
-              final url = requestFocusNodeHrefResult?.url;
-              final title = requestFocusNodeHrefResult?.title;
-              debugPrint("TEST_D 121 url={$url} type={$title}");
+              final type = hitTestResult.type;
+              final isLink = type ==
+                      InAppWebViewHitTestResultType.SRC_ANCHOR_TYPE ||
+                  type == InAppWebViewHitTestResultType.SRC_IMAGE_ANCHOR_TYPE;
+              if (!isLink) {
+                return;
+              }
+              final focus = await controller.requestFocusNodeHref();
+              final rawUrl = focus?.url.toString();
+              if (rawUrl == null || rawUrl.isEmpty) {
+                return;
+              }
+              final prepared = await _prepareLongPressLink(controller, rawUrl);
+              if (prepared == null) {
+                return;
+              }
+              _pendingLongPressLink = prepared;
+              final action = await _showLinkActionSheet(
+                url: prepared.anchorUrl,
+                title: focus?.title,
+              );
+              if (action == _LinkAction.addSingle) {
+                await _handleAddLinkFromContextMenu();
+              } else if (action == _LinkAction.addBatch) {
+                await _handleAddBatchFromContextMenu();
+              } else {
+                _pendingLongPressLink = null;
+              }
             },
             shouldOverrideUrlLoading: (controller, navigationAction) async {
               final uri = navigationAction.request.url;
@@ -1267,6 +1290,21 @@ class _ExtractedArticle {
   final String? title;
   final String content;
   final String? html;
+}
+
+enum _LinkAction {
+  addSingle,
+  addBatch,
+}
+
+class _PreparedLink {
+  const _PreparedLink({
+    required this.anchorUrl,
+    required this.normalizedUrl,
+  });
+
+  final String anchorUrl;
+  final String normalizedUrl;
 }
 
 class _ActionButton extends StatelessWidget {
