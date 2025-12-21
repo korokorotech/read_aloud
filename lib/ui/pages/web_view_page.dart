@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:go_router/go_router.dart';
+import 'package:html/dom.dart' as dom;
+import 'package:html/parser.dart' as html_parser;
 import 'package:read_aloud/entities/news_item_record.dart';
 import 'package:read_aloud/repositories/news_item_repository.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
@@ -525,18 +527,27 @@ class _WebViewPageState extends State<WebViewPage> {
 
     final Map<String, dynamic> result = jsonDecode(jsonStr);
     if (result['ok'] == true) {
-      final text = result['text'] as String?;
-      final title = result['title'] as String?;
-      if (text == null) {
-        return null;
+      final title = (result['title'] as String?)?.trim();
+      final html = result['html'] as String?;
+      final textFallback = (result['text'] as String?) ?? '';
+      if (html == null || html.trim().isEmpty) {
+        final normalized = normalize(textFallback);
+        if (normalized.isEmpty) {
+          return null;
+        }
+        return _ExtractedArticle(title: title, content: normalized);
       }
-      _logWithSave("TEST_D 80 text unnormalized $text");
-      final normalized = normalize(text);
-      _logWithSave("TEST_D 81 text normalized $text");
+      final extracted = _extractMainTextFromReadabilityHtml(html);
+      final normalized =
+          normalize(extracted.isNotEmpty ? extracted : textFallback);
       if (normalized.isEmpty) {
         return null;
       }
-      return _ExtractedArticle(title: title, content: normalized);
+      return _ExtractedArticle(
+        title: title,
+        content: normalized,
+        html: html,
+      );
     } else {
       _logWithSave('Readability failed: ${result['error']}');
     }
@@ -620,6 +631,87 @@ class _WebViewPageState extends State<WebViewPage> {
     }
     const hints = ['記事全文を読む', '続きを読む', '続きは', '記事の続き', 'この先は'];
     return hints.any(text.contains);
+  }
+
+  String _extractMainTextFromReadabilityHtml(String html) {
+    final doc = html_parser.parse(html);
+    dom.Element? root = doc.querySelector('[data-ual-view-type="detail"]') ??
+        doc.querySelector('article') ??
+        doc.body;
+    if (root == null) {
+      return '';
+    }
+
+    root.querySelectorAll('header, nav, aside, footer').forEach((e) => e.remove());
+    root.querySelectorAll('figcaption').forEach((e) => e.remove());
+    root.querySelectorAll('#emotion-list').forEach((e) => e.remove());
+
+    for (final sec in root.querySelectorAll('section')) {
+      final heading = sec.querySelector('h1,h2,h3,h4,h5,h6')?.text ?? '';
+      if (_containsAny(heading, const ['関連記事', '関連', 'あわせて読みたい'])) {
+        sec.remove();
+      }
+    }
+
+    final kept = <String>[];
+    for (final p in root.querySelectorAll('p')) {
+      final text = _normalizeSpaces(p.text);
+      if (text.isEmpty) {
+        continue;
+      }
+      if (_containsAny(text, const ['記事に関する報告', '問題を報告'])) {
+        continue;
+      }
+      if (_containsAny(text, const [
+        'コメント',
+        '配信',
+        '関連記事',
+        'おすすめ',
+        'シェア',
+        'PR',
+        '広告',
+        '【写真あり】',
+        '【図解】',
+        'もっと読む',
+        '続きを読む',
+      ])) {
+        if (text.length < 120) {
+          continue;
+        }
+      }
+      if (text.length < 35) {
+        continue;
+      }
+
+      final linkTextLen = p.querySelectorAll('a').fold<int>(
+        0,
+        (sum, a) => sum + _normalizeSpaces(a.text).length,
+      );
+      final totalLen = text.length;
+      final linkDensity = totalLen == 0 ? 0.0 : linkTextLen / totalLen;
+      if (linkDensity > 0.60) {
+        continue;
+      }
+      kept.add(text);
+    }
+
+    if (kept.isEmpty) {
+      return '';
+    }
+    return kept.join('\n\n');
+  }
+
+  bool _containsAny(String s, List<String> needles) {
+    for (final n in needles) {
+      if (s.contains(n)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  String _normalizeSpaces(String s) {
+    return s.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   String normalize(String s) {
@@ -883,10 +975,15 @@ class _WebViewPageState extends State<WebViewPage> {
 }
 
 class _ExtractedArticle {
-  const _ExtractedArticle({this.title, required this.content});
+  const _ExtractedArticle({
+    this.title,
+    required this.content,
+    this.html,
+  });
 
   final String? title;
   final String content;
+  final String? html;
 }
 
 class _ActionButton extends StatelessWidget {
@@ -946,15 +1043,20 @@ const _readabilityExtractorJs = r'''
     }
     const doc = document.cloneNode(true);
     const article = new Readability(doc).parse();
-    console.log("TEST_D 102 article.content", article.content);
 
-    if (!article || !article.textContent) {
+    if (!article) {
       return JSON.stringify({ ok: false, error: 'No article' });
     }
+
+    const text = article.textContent || '';
+    const html = article.content || '';
+    const title = article.title || '';
+
     return JSON.stringify({
       ok: true,
-      title: article.title || '',
-      text: article.textContent || ''
+      title,
+      text,
+      html
     });
   } catch (e) {
     return JSON.stringify({ ok: false, error: String(e) });
