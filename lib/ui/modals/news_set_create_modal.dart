@@ -1,36 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:read_aloud/entities/news_set_add_option.dart';
+import 'package:read_aloud/entities/preferred_news_source.dart';
 
-enum NewsSetAddOption {
-  searchGoogle,
-  googleNews,
-  customUrl,
-}
-
-extension NewsSetAddOptionLabel on NewsSetAddOption {
-  String get label {
-    switch (this) {
-      case NewsSetAddOption.searchGoogle:
-        return '検索して追加';
-      case NewsSetAddOption.googleNews:
-        return 'ニュースから追加';
-      case NewsSetAddOption.customUrl:
-        return '指定のURLから追加';
-    }
-  }
-
-  String get description {
-    switch (this) {
-      case NewsSetAddOption.searchGoogle:
-        return '検索へ遷移します';
-      case NewsSetAddOption.googleNews:
-        return 'ニュース検索へ遷移します';
-      case NewsSetAddOption.customUrl:
-        return 'URLを入力して任意のサイトへ遷移します';
-    }
-  }
-}
-
-Uri? resolveInitialUrlForNewsSet(NewsSetCreateResult result) {
+Uri? resolveInitialUrlForNewsSet(
+  NewsSetCreateResult result, {
+  required PreferredNewsSource newsSource,
+}) {
   switch (result.option) {
     case NewsSetAddOption.searchGoogle:
       final keyword = result.searchKeyword;
@@ -40,14 +15,26 @@ Uri? resolveInitialUrlForNewsSet(NewsSetCreateResult result) {
       }
       return Uri.parse('https://www.google.com');
     case NewsSetAddOption.googleNews:
-      final keyword = result.searchKeyword;
-      if (keyword != null && keyword.isNotEmpty) {
-        final query = Uri.encodeQueryComponent(keyword);
+      return _buildNewsSiteUrl(newsSource, result.searchKeyword);
+    case NewsSetAddOption.customUrl:
+      return result.customUrl;
+  }
+}
+
+Uri _buildNewsSiteUrl(PreferredNewsSource source, String? keyword) {
+  final hasKeyword = keyword != null && keyword.isNotEmpty;
+  final query = hasKeyword ? Uri.encodeQueryComponent(keyword) : null;
+  switch (source) {
+    case PreferredNewsSource.googleNews:
+      if (query != null) {
         return Uri.parse('https://news.google.com/search?q=$query');
       }
       return Uri.parse('https://news.google.com');
-    case NewsSetAddOption.customUrl:
-      return result.customUrl;
+    case PreferredNewsSource.yahooNews:
+      if (query != null) {
+        return Uri.parse('https://news.yahoo.co.jp/search?p=$query');
+      }
+      return Uri.parse('https://news.yahoo.co.jp/');
   }
 }
 
@@ -70,10 +57,14 @@ class NewsSetCreateModal extends StatefulWidget {
     super.key,
     required this.initialName,
     this.title,
+    required this.initialOption,
+    required this.preferredNewsSource,
   });
 
   final String initialName;
   final String? title;
+  final NewsSetAddOption initialOption;
+  final PreferredNewsSource preferredNewsSource;
 
   @override
   State<NewsSetCreateModal> createState() => _NewsSetCreateModalState();
@@ -82,7 +73,7 @@ class NewsSetCreateModal extends StatefulWidget {
 class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
   late final TextEditingController _urlController;
   late final TextEditingController _keywordController;
-  NewsSetAddOption _selectedOption = NewsSetAddOption.googleNews;
+  late NewsSetAddOption _selectedOption;
   String? _urlErrorText;
 
   bool get _requiresUrl => _selectedOption == NewsSetAddOption.customUrl;
@@ -102,6 +93,7 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
     super.initState();
     _urlController = TextEditingController();
     _keywordController = TextEditingController();
+    _selectedOption = widget.initialOption;
   }
 
   @override
@@ -174,7 +166,9 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(option.label),
+                            Text(
+                              option.label,
+                            ),
                             const SizedBox(height: 4),
                             Text(
                               option.description,

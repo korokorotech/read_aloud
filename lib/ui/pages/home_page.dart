@@ -1,10 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:read_aloud/entities/news_set_add_option.dart';
 import 'package:read_aloud/entities/news_set_summary.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
+import 'package:read_aloud/entities/preferred_news_source.dart';
+import 'package:read_aloud/services/app_settings.dart';
 import 'package:read_aloud/services/player_service.dart';
 import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
+import 'package:read_aloud/ui/pages/settings_page.dart';
 import 'package:read_aloud/ui/routes/app_router.dart';
 import 'package:read_aloud/ui/widgets/snack_bar_helper.dart';
 
@@ -21,6 +25,9 @@ class _HomePageState extends State<HomePage> {
   List<NewsSetSummary> _newsSets = [];
   bool _isLoading = true;
   String? _errorMessage;
+  NewsSetAddOption _defaultAddOption = NewsSetAddOption.googleNews;
+  PreferredNewsSource _preferredNewsSource =
+      PreferredNewsSource.googleNews;
 
   final Set<String> _reservedSetNames = <String>{};
 
@@ -28,6 +35,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadNewsSets();
+    unawaited(_loadSettings());
   }
 
   Future<void> _handleCreateNewSet() async {
@@ -38,6 +46,8 @@ class _HomePageState extends State<HomePage> {
       useSafeArea: true,
       builder: (context) => NewsSetCreateModal(
         initialName: initialName,
+        initialOption: _defaultAddOption,
+        preferredNewsSource: _preferredNewsSource,
       ),
     );
 
@@ -51,7 +61,10 @@ class _HomePageState extends State<HomePage> {
 
     _commitDefaultSetNameSuggestion(result.setName);
 
-    final initialUrl = resolveInitialUrlForNewsSet(result);
+    final initialUrl = resolveInitialUrlForNewsSet(
+      result,
+      newsSource: _preferredNewsSource,
+    );
     if (initialUrl == null) {
       showAutoHideSnackBar(
         context,
@@ -75,6 +88,14 @@ class _HomePageState extends State<HomePage> {
     await context.pushSetDetail(set.id);
     if (!mounted) return;
     await _loadNewsSets(showSpinner: false);
+  }
+
+  Future<void> _openSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SettingsPage()),
+    );
+    if (!mounted) return;
+    await _loadSettings();
   }
 
   Future<void> _handleDeleteSet(NewsSetSummary set) async {
@@ -135,12 +156,7 @@ class _HomePageState extends State<HomePage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),
-            onPressed: () {
-              showAutoHideSnackBar(
-                context,
-                message: '設定画面はまだありません。',
-              );
-            },
+            onPressed: _openSettings,
           ),
         ],
       ),
@@ -391,6 +407,17 @@ class _HomePageState extends State<HomePage> {
 
   void _commitDefaultSetNameSuggestion(String name) {
     _reservedSetNames.add(name);
+  }
+
+  Future<void> _loadSettings() async {
+    final settings = AppSettings.instance;
+    final defaultOption = await settings.getDefaultAddOption();
+    final preferredSource = await settings.getPreferredNewsSource();
+    if (!mounted) return;
+    setState(() {
+      _defaultAddOption = defaultOption;
+      _preferredNewsSource = preferredSource;
+    });
   }
 
   void _cleanupReservedSetNames() {

@@ -4,8 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:read_aloud/entities/news_item_record.dart';
 import 'package:read_aloud/entities/news_set_detail.dart';
+import 'package:read_aloud/entities/news_set_add_option.dart';
+import 'package:read_aloud/entities/preferred_news_source.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
 import 'package:read_aloud/repositories/news_item_repository.dart';
+import 'package:read_aloud/services/app_settings.dart';
 import 'package:read_aloud/services/player_service.dart';
 import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
 import 'package:read_aloud/ui/pages/article_web_view_page.dart';
@@ -189,6 +192,9 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
   }
 
   Future<void> _openWebViewForSet(NewsSetDetail detail) async {
+    final settings = AppSettings.instance;
+    final defaultOption = await settings.getDefaultAddOption();
+    final preferredSource = await settings.getPreferredNewsSource();
     final result = await showModalBottomSheet<NewsSetCreateResult>(
       context: context,
       isScrollControlled: true,
@@ -196,6 +202,8 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
       builder: (context) => NewsSetCreateModal(
         initialName: detail.name,
         title: 'ニュースセットに追加',
+        initialOption: defaultOption,
+        preferredNewsSource: preferredSource,
       ),
     );
 
@@ -203,7 +211,10 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
       return;
     }
 
-    final initialUrl = resolveInitialUrlForNewsSet(result);
+    final initialUrl = resolveInitialUrlForNewsSet(
+      result,
+      newsSource: preferredSource,
+    );
     if (initialUrl == null) {
       showAutoHideSnackBar(
         context,
