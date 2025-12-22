@@ -7,6 +7,8 @@ import 'package:read_aloud/entities/news_set_detail.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
 import 'package:read_aloud/services/app_settings.dart';
 
+enum _ActiveTextType { preview, article, standalone }
+
 class PlayerService extends ChangeNotifier {
   PlayerService._() {
     _setupTts();
@@ -54,15 +56,21 @@ class PlayerService extends ChangeNotifier {
   List<String> _activeChunks = const [];
   int _activeChunkIndex = 0;
   int _seekDelta = 0;
+  _ActiveTextType? _activeTextType;
+  bool _hasPendingArticleAfterPreview = false;
+  bool _skipToNextTextBlockRequested = false;
+  bool _interruptCurrentText = false;
 
   static const List<double> playbackSpeedOptions = [
     0.5,
-    0.75,
+    0.6,
+    0.8,
     1.0,
-    1.25,
+    1.2,
+    1.4,
     1.5,
-    1.75,
-    2.0,
+    1.7,
+    1.8,
   ];
 
   bool get isLoading => _isLoading;
@@ -82,6 +90,9 @@ class PlayerService extends ChangeNotifier {
     }
     final hasNextChunk = _activeChunkIndex < _activeChunks.length - 1;
     if (hasNextChunk) {
+      return true;
+    }
+    if (_canJumpToArticleFromPreview()) {
       return true;
     }
     return canPlayNext;
@@ -241,6 +252,14 @@ class PlayerService extends ChangeNotifier {
       return;
     }
     if (delta > 0 && _activeChunkIndex >= _activeChunks.length - 1) {
+      if (_canJumpToArticleFromPreview()) {
+        _skipToNextTextBlockRequested = true;
+        _seekDelta = 0;
+        _interruptCurrentText = true;
+        await _flutterTts.stop();
+        await Future.delayed(_seekStopBuffer);
+        return;
+      }
       _seekDelta = 0;
       if (canPlayNext) {
         await playNext();
@@ -253,6 +272,11 @@ class PlayerService extends ChangeNotifier {
     _seekDelta += delta;
     await _flutterTts.stop();
     await Future.delayed(_seekStopBuffer);
+  }
+
+  bool _canJumpToArticleFromPreview() {
+    return _activeTextType == _ActiveTextType.preview &&
+        _hasPendingArticleAfterPreview;
   }
 
   Future<void> _startPlaybackLoop() async {
@@ -408,22 +432,35 @@ class PlayerService extends ChangeNotifier {
     final preview = item.previewText.trim();
     final article = item.articleText?.trim() ?? '';
     if (_readPreviewBeforeArticle && preview.isNotEmpty && article.isNotEmpty) {
+      _activeTextType = _ActiveTextType.preview;
+      _hasPendingArticleAfterPreview = true;
       final previewPlayed = await _speakText(preview);
+      final skippedToArticle = _skipToNextTextBlockRequested;
+      _activeTextType = null;
+      _hasPendingArticleAfterPreview = false;
       if (_stopRequested) {
+        _skipToNextTextBlockRequested = false;
         return previewPlayed;
       }
-      if (previewPlayed) {
+      if (previewPlayed && !skippedToArticle) {
         await _waitBeforeArticle();
       }
       if (_stopRequested) {
+        _skipToNextTextBlockRequested = false;
         return previewPlayed;
       }
+      _skipToNextTextBlockRequested = false;
+      _activeTextType = _ActiveTextType.article;
       final articlePlayed = await _speakText(article);
+      _activeTextType = null;
       return previewPlayed || articlePlayed;
     }
 
     final text = _resolveTextForItem(item);
-    return await _speakText(text);
+    _activeTextType = _ActiveTextType.article;
+    final played = await _speakText(text);
+    _activeTextType = null;
+    return played;
   }
 
   Future<bool> _speakText(String text) async {
@@ -439,6 +476,10 @@ class PlayerService extends ChangeNotifier {
 
     var hasSpoken = false;
     while (!_stopRequested && _activeChunkIndex < _activeChunks.length) {
+      if (_interruptCurrentText) {
+        _interruptCurrentText = false;
+        break;
+      }
       if (_seekDelta != 0) {
         final delta = _seekDelta;
         _seekDelta = 0;
@@ -481,6 +522,7 @@ class PlayerService extends ChangeNotifier {
     _activeChunks = const [];
     _activeChunkIndex = 0;
     _seekDelta = 0;
+    _interruptCurrentText = false;
     if (notify && hadChunks) {
       notifyListeners();
     }
