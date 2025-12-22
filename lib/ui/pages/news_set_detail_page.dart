@@ -542,6 +542,8 @@ class _PlaybackSection extends StatelessWidget {
     final statusText = isCurrentSet
         ? '再生中 ${index + 1} / ${player.currentItems.length}'
         : 'まだ再生していません';
+    final seekBackwardEnabled = isCurrentSet && player.canSeekBackward;
+    final seekForwardEnabled = isCurrentSet && player.canSeekForward;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,6 +567,13 @@ class _PlaybackSection extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            IconButton(
+              icon: const Icon(Icons.fast_rewind),
+              tooltip: '前のチャンク',
+              onPressed: seekBackwardEnabled ? player.seekBackwardChunk : null,
+              iconSize: 24,
+            ),
+            const SizedBox(width: 12),
             IconButton.filledTonal(
               icon: const Icon(Icons.skip_previous),
               tooltip: '前の記事',
@@ -592,6 +601,13 @@ class _PlaybackSection extends StatelessWidget {
               tooltip: '次の記事',
               onPressed:
                   isCurrentSet && player.canPlayNext ? player.playNext : null,
+              iconSize: 24,
+            ),
+            const SizedBox(width: 12),
+            IconButton(
+              icon: const Icon(Icons.fast_forward),
+              tooltip: '次のチャンク',
+              onPressed: seekForwardEnabled ? player.seekForwardChunk : null,
               iconSize: 24,
             ),
           ],

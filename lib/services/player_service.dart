@@ -29,6 +29,7 @@ class PlayerService extends ChangeNotifier {
   bool _stopRequested = false;
   static const _interItemSilence = Duration(seconds: 1);
   static const _preArticleDelay = Duration(seconds: 1);
+  static const _seekStopBuffer = Duration(milliseconds: 50);
   static const _chunkEndCheckStartLength = 25;
   static const _chunkMaxLength = 500;
   static const _chunkDelimiters = {
@@ -50,6 +51,9 @@ class PlayerService extends ChangeNotifier {
   };
   bool _readPreviewBeforeArticle = true;
   double _playbackSpeed = 1.0;
+  List<String> _activeChunks = const [];
+  int _activeChunkIndex = 0;
+  int _seekDelta = 0;
 
   static const List<double> playbackSpeedOptions = [
     0.5,
@@ -69,6 +73,26 @@ class PlayerService extends ChangeNotifier {
   List<NewsItemRecord> get currentItems => List.unmodifiable(_items);
   String? get errorMessage => _errorMessage;
   double get playbackSpeed => _playbackSpeed;
+  bool get canSeekForward {
+    if (!_isPlaying) {
+      return false;
+    }
+    if (_activeChunks.isEmpty) {
+      return false;
+    }
+    final hasNextChunk = _activeChunkIndex < _activeChunks.length - 1;
+    if (hasNextChunk) {
+      return true;
+    }
+    return canPlayNext;
+  }
+
+  bool get canSeekBackward {
+    if (!_isPlaying || _activeChunks.isEmpty) {
+      return false;
+    }
+    return _activeChunkIndex > 0;
+  }
 
   bool get canPlayNext =>
       _items.isNotEmpty && _currentIndex < _items.length - 1;
@@ -174,6 +198,14 @@ class PlayerService extends ChangeNotifier {
     await _startPlaybackLoop();
   }
 
+  Future<void> seekForwardChunk() async {
+    await _seekChunk(1);
+  }
+
+  Future<void> seekBackwardChunk() async {
+    await _seekChunk(-1);
+  }
+
   Future<void> selectIndex(int index) async {
     if (_items.isEmpty || index < 0 || index >= _items.length) {
       return;
@@ -198,6 +230,31 @@ class PlayerService extends ChangeNotifier {
     await AppSettings.instance.setPlaybackSpeed(speed);
   }
 
+  Future<void> _seekChunk(int delta) async {
+    if (!_isPlaying) {
+      return;
+    }
+    if (_activeChunks.isEmpty) {
+      if (delta > 0 && canPlayNext) {
+        await playNext();
+      }
+      return;
+    }
+    if (delta > 0 && _activeChunkIndex >= _activeChunks.length - 1) {
+      _seekDelta = 0;
+      if (canPlayNext) {
+        await playNext();
+      }
+      return;
+    }
+    if (delta < 0 && _activeChunkIndex <= 0) {
+      return;
+    }
+    _seekDelta += delta;
+    await _flutterTts.stop();
+    await Future.delayed(_seekStopBuffer);
+  }
+
   Future<void> _startPlaybackLoop() async {
     if (_items.isEmpty || _currentIndex < 0 || _currentIndex >= _items.length) {
       _isPlaying = false;
@@ -219,6 +276,7 @@ class PlayerService extends ChangeNotifier {
       await _flutterTts.stop();
       _stopRequested = false;
       _isPlaying = false;
+      _resetActiveChunks();
       notifyListeners();
       return;
     }
@@ -229,6 +287,7 @@ class PlayerService extends ChangeNotifier {
     } finally {
       _playbackFuture = null;
     }
+    _resetActiveChunks();
   }
 
   Future<void> _playbackLoop() async {
@@ -253,6 +312,7 @@ class PlayerService extends ChangeNotifier {
       }
     } finally {
       _playbackFuture = null;
+      _resetActiveChunks();
       _isPlaying = false;
       notifyListeners();
       _stopRequested = false;
@@ -369,20 +429,61 @@ class PlayerService extends ChangeNotifier {
   Future<bool> _speakText(String text) async {
     final chunks = _splitIntoChunks(text);
     if (chunks.isEmpty) {
+      _resetActiveChunks(notify: true);
       return false;
     }
-    for (final chunk in chunks) {
-      if (_stopRequested) break;
+    _activeChunks = chunks;
+    _activeChunkIndex = 0;
+    _seekDelta = 0;
+    notifyListeners();
+
+    var hasSpoken = false;
+    while (!_stopRequested && _activeChunkIndex < _activeChunks.length) {
+      if (_seekDelta != 0) {
+        final delta = _seekDelta;
+        _seekDelta = 0;
+        final nextIndex =
+            (_activeChunkIndex + delta).clamp(0, _activeChunks.length - 1);
+        if (nextIndex != _activeChunkIndex) {
+          _activeChunkIndex = nextIndex;
+          notifyListeners();
+        }
+        continue;
+      }
+
+      final chunk = _activeChunks[_activeChunkIndex];
       try {
         await _flutterTts.speak(chunk);
+        hasSpoken = true;
       } catch (e) {
         _errorMessage = 'TTSエラー: $e';
         _stopRequested = true;
         break;
       }
-      if (_stopRequested) break;
+
+      if (_stopRequested) {
+        break;
+      }
+      if (_seekDelta != 0) {
+        continue;
+      }
+
+      _activeChunkIndex += 1;
+      notifyListeners();
     }
-    return true;
+
+    _resetActiveChunks(notify: true);
+    return hasSpoken;
+  }
+
+  void _resetActiveChunks({bool notify = false}) {
+    final hadChunks = _activeChunks.isNotEmpty;
+    _activeChunks = const [];
+    _activeChunkIndex = 0;
+    _seekDelta = 0;
+    if (notify && hadChunks) {
+      notifyListeners();
+    }
   }
 
   List<String> _splitIntoChunks(String text) {
@@ -400,20 +501,23 @@ class PlayerService extends ChangeNotifier {
   }
 
   int _findChunkEnd(String text, int startIndex) {
-    final remaining = text.length - startIndex;
-    if (remaining <= _chunkMaxLength) {
-      return text.length;
-    }
+    final len = text.length;
+    final remaining = len - startIndex;
+    if (remaining <= 0) return startIndex;
+
+    final searchEnd = (startIndex + _chunkMaxLength).clamp(startIndex + 1, len);
+
     final searchStart =
-        startIndex + _chunkEndCheckStartLength.clamp(0, remaining);
-    final searchEnd =
-        (startIndex + _chunkMaxLength).clamp(startIndex, text.length);
+        (startIndex + _chunkEndCheckStartLength).clamp(startIndex, searchEnd);
+
     for (var i = searchStart; i < searchEnd; i++) {
       final char = text[i];
       if (_chunkDelimiters.contains(char)) {
         return i + 1;
       }
     }
+
+    // 見つからなければ、残り全部（searchEndがlenなら末尾まで）
     return searchEnd;
   }
 }
