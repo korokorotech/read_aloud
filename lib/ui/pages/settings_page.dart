@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:read_aloud/entities/news_set_add_option.dart';
+import 'package:read_aloud/entities/news_set_retention_option.dart';
 import 'package:read_aloud/entities/preferred_news_source.dart';
 import 'package:read_aloud/services/app_settings.dart';
 import 'package:read_aloud/services/player_service.dart';
@@ -21,6 +22,7 @@ class _SettingsPageState extends State<SettingsPage> {
   PreferredNewsSource _preferredNewsSource = PreferredNewsSource.googleNews;
   bool _readPreviewBeforeArticle = true;
   double _playbackSpeed = 1.0;
+  NewsSetRetentionOption _newsSetRetentionOption = NewsSetRetentionOption.keep;
 
   @override
   void initState() {
@@ -34,12 +36,14 @@ class _SettingsPageState extends State<SettingsPage> {
     final readPreviewBeforeArticle =
         await _settings.getReadPreviewBeforeArticle();
     final playbackSpeed = await _settings.getPlaybackSpeed();
+    final newsSetRetention = await _settings.getNewsSetRetentionOption();
     if (!mounted) return;
     setState(() {
       _defaultAddOption = addOption;
       _preferredNewsSource = newsSource;
       _readPreviewBeforeArticle = readPreviewBeforeArticle;
       _playbackSpeed = playbackSpeed;
+      _newsSetRetentionOption = newsSetRetention;
       _isLoading = false;
     });
   }
@@ -70,6 +74,15 @@ class _SettingsPageState extends State<SettingsPage> {
       _playbackSpeed = speed;
     });
     await PlayerService.instance.setPlaybackSpeed(speed);
+  }
+
+  Future<void> _updateNewsSetRetentionOption(
+    NewsSetRetentionOption option,
+  ) async {
+    setState(() {
+      _newsSetRetentionOption = option;
+    });
+    await _settings.setNewsSetRetentionOption(option);
   }
 
   @override
@@ -157,7 +170,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   const SizedBox(height: 24),
                   DropdownButtonFormField<double>(
-                    value: _playbackSpeed,
+                    initialValue: _playbackSpeed,
                     decoration: const InputDecoration(
                       labelText: '再生速度',
                       border: OutlineInputBorder(),
@@ -173,6 +186,28 @@ class _SettingsPageState extends State<SettingsPage> {
                     onChanged: (value) {
                       if (value != null) {
                         _updatePlaybackSpeed(value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  DropdownButtonFormField<NewsSetRetentionOption>(
+                    initialValue: _newsSetRetentionOption,
+                    decoration: const InputDecoration(
+                      labelText: '起動時に古いニュースセットを削除',
+                      helperText: '指定した日より古いニュースセットを削除します',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: NewsSetRetentionOption.values
+                        .map(
+                          (option) => DropdownMenuItem(
+                            value: option,
+                            child: Text(option.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        _updateNewsSetRetentionOption(value);
                       }
                     },
                   ),

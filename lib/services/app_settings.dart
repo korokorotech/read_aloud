@@ -1,4 +1,5 @@
 import 'package:read_aloud/entities/news_set_add_option.dart';
+import 'package:read_aloud/entities/news_set_retention_option.dart';
 import 'package:read_aloud/entities/preferred_news_source.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,6 +13,7 @@ class AppSettings {
   static const _keyReadPreviewBeforeArticle =
       'read_preview_before_article_enabled';
   static const _keyPlaybackSpeed = 'playback_speed';
+  static const _keyNewsSetRetention = 'news_set_retention';
 
   Future<NewsSetAddOption> getDefaultAddOption() async {
     final prefs = await SharedPreferences.getInstance();
@@ -59,5 +61,21 @@ class AppSettings {
   Future<void> setPlaybackSpeed(double speed) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_keyPlaybackSpeed, speed);
+  }
+
+  Future<NewsSetRetentionOption> getNewsSetRetentionOption() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_keyNewsSetRetention);
+    return NewsSetRetentionOption.values.firstWhere(
+      (option) => option.name == value,
+      orElse: () => NewsSetRetentionOption.keep,
+    );
+  }
+
+  Future<void> setNewsSetRetentionOption(
+    NewsSetRetentionOption option,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyNewsSetRetention, option.name);
   }
 }

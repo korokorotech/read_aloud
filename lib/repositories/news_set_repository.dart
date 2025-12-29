@@ -104,6 +104,15 @@ class NewsSetRepository {
     await db.delete('news_sets', where: 'id = ?', whereArgs: [setId]);
   }
 
+  Future<int> deleteSetsNotUpdatedSince(DateTime cutoff) async {
+    final db = await _database.database;
+    return db.delete(
+      'news_sets',
+      where: 'updated_at <= ?',
+      whereArgs: [cutoff.millisecondsSinceEpoch],
+    );
+  }
+
   static DateTime _toDateTime(Object? value) {
     final millis = _asInt(value);
     return DateTime.fromMillisecondsSinceEpoch(millis);

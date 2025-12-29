@@ -4,17 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:read_aloud/ui/routes/app_router.dart';
+import 'package:read_aloud/services/news_set_cleanup_service.dart';
 
-void main() {
-  initApp();
+Future<void> main() async {
+  await initApp();
   runApp(const ReadAloudApp());
 }
 
-void initApp() {
+Future<void> initApp() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isAndroid) {
     InAppWebViewController.setWebContentsDebuggingEnabled(true);
   }
+  await NewsSetCleanupService.instance.run();
 }
 
 class ReadAloudApp extends StatelessWidget {
