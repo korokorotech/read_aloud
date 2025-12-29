@@ -12,11 +12,21 @@ class NewsSetRepository {
   Future<List<NewsSetSummary>> fetchSummaries() async {
     final db = await _database.database;
     final result = await db.rawQuery('''
-      SELECT ns.id, ns.name, ns.updated_at, COUNT(ni.id) AS article_count
+      SELECT
+        ns.id,
+        ns.name,
+        ns.updated_at,
+        (
+          SELECT COUNT(*) FROM news_items AS ni
+          WHERE ni.set_id = ns.id AND ni.deleted_at IS NULL
+        ) AS article_count,
+        (
+          SELECT preview_text FROM news_items AS ni
+          WHERE ni.set_id = ns.id AND ni.deleted_at IS NULL
+          ORDER BY ni.order_index ASC
+          LIMIT 1
+        ) AS first_item_title
       FROM news_sets AS ns
-      LEFT JOIN news_items AS ni
-        ON ns.id = ni.set_id AND ni.deleted_at IS NULL
-      GROUP BY ns.id
       ORDER BY ns.updated_at DESC
     ''');
 
@@ -27,6 +37,7 @@ class NewsSetRepository {
             name: row['name'] as String,
             articleCount: _asInt(row['article_count']),
             updatedAt: _toDateTime(row['updated_at']),
+            firstItemTitle: row['first_item_title'] as String?,
           ),
         )
         .toList();

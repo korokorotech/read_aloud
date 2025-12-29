@@ -206,10 +206,24 @@ class _HomePageState extends State<HomePage> {
                                                 final isLoadingPlayer =
                                                     isActive &&
                                                         _player.isLoading;
+                                                final currentHeadline =
+                                                    isActive &&
+                                                            _player.currentItems
+                                                                .isNotEmpty
+                                                        ? _player
+                                                            .currentItems[
+                                                                _player
+                                                                    .currentIndex]
+                                                            .previewText
+                                                        : null;
+                                                final subtitle = currentHeadline ??
+                                                    set.firstItemTitle ??
+                                                    (set.articleCount > 0
+                                                        ? 'タイトルが取得できませんでした'
+                                                        : '記事がありません');
                                                 return _NewsSetCard(
                                                   newsSet: set,
-                                                  subtitle:
-                                                      '${set.articleCount}件・最終更新 ${_formatUpdatedAt(set.updatedAt)}',
+                                                  subtitle: subtitle,
                                                   onTap: () =>
                                                       _handleOpenSet(set),
                                                   onPlay: () =>
@@ -259,18 +273,6 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
-  }
-
-  String _formatUpdatedAt(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference < const Duration(hours: 24) && now.day == dateTime.day) {
-      return '今日 ${_twoDigits(dateTime.hour)}:${_twoDigits(dateTime.minute)}';
-    }
-
-    return '${dateTime.year}/${_twoDigits(dateTime.month)}/${_twoDigits(dateTime.day)}'
-        ' ${_twoDigits(dateTime.hour)}:${_twoDigits(dateTime.minute)}';
   }
 
   String _generateTempSetId() => 'set-${DateTime.now().millisecondsSinceEpoch}';
@@ -480,89 +482,130 @@ class _NewsSetCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+    final muted = theme.colorScheme.onSurfaceVariant;
     return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: onTap,
+        onLongPress: () => _showContextMenu(context),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: primary.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(16),
+              Material(
+                color: primary.withOpacity(0.12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                padding: const EdgeInsets.all(14),
-                child: Icon(
-                  Icons.queue_music,
-                  color: primary,
-                  size: 24,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: isLoading
+                      ? null
+                      : (isActive ? onTogglePlay : onPlay),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Icon(
+                      isActive && isPlaying
+                          ? Icons.pause
+                          : Icons.play_arrow,
+                      color: primary,
+                      size: 22,
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
-                          child: Text(
-                            newsSet.name,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  newsSet.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              if (isActive)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.circle,
+                                        size: 8,
+                                        color:
+                                            isPlaying ? Colors.green : muted,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        isPlaying ? '再生中' : '一時停止',
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(color: muted),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
-                        ),
-                        IconButton(
-                          onPressed: onDelete,
-                          tooltip: 'このセットを削除',
-                          icon: const Icon(Icons.delete_outline),
-                          visualDensity: VisualDensity.compact,
-                          splashRadius: 18,
                         ),
                       ],
                     ),
                     const SizedBox(height: 6),
                     Text(
                       subtitle,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey[700],
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: FilledButton.icon(
-                        icon: isActive && isPlaying
-                            ? const Icon(Icons.pause)
-                            : const Icon(Icons.play_arrow),
-                        label: Text(
-                            isActive ? (isPlaying ? '一時停止' : '再生再開') : '再生'),
-                        onPressed: isLoading
-                            ? null
-                            : (isActive ? onTogglePlay : onPlay),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                        ),
-                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          theme.textTheme.bodyMedium?.copyWith(color: muted),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               const Icon(Icons.chevron_right, color: Colors.black54),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  void _showContextMenu(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('削除'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  onDelete();
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
