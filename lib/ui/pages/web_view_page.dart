@@ -45,7 +45,6 @@ class _WebViewPageState extends State<WebViewPage> {
   late final NewsSetRepository _newsSetRepository;
   final PlayerService _player = PlayerService.instance;
   InAppWebViewController? _webViewController;
-  bool _showActionMenu = false;
   late final Future<UserScript> _readabilityUserScriptFuture;
   bool _hasExistingSet = false;
   bool _isCheckingSetExists = true;
@@ -218,34 +217,6 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
-  void _handleBulkAdd() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('一括設定（モック）'),
-        content: const Text(
-          'ここではWebView内で検出したリンクのプレビューを表示し、まとめて追加する想定です。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('キャンセル'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              showAutoHideSnackBar(
-                context,
-                message: 'リンクを一括追加しました（モック）。',
-              );
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _handleAddCurrentPage() async {
     final controller = _webViewController;
     if (controller == null) {
@@ -265,12 +236,6 @@ class _WebViewPageState extends State<WebViewPage> {
       return;
     }
     final normalizedUrl = _normalizeUrl(urlStr) ?? urlStr;
-
-    if (_showActionMenu) {
-      setState(() {
-        _showActionMenu = false;
-      });
-    }
 
     if (!mounted) return;
     showAutoHideSnackBar(
@@ -308,26 +273,6 @@ class _WebViewPageState extends State<WebViewPage> {
     }
   }
 
-  void _toggleActionMenu() {
-    setState(() {
-      _showActionMenu = !_showActionMenu;
-    });
-  }
-
-  void _handleBulkAddFromMenu() {
-    setState(() {
-      _showActionMenu = false;
-    });
-    _handleBulkAdd();
-  }
-
-  void _handleToggleAddModeFromMenu() {
-    setState(() {
-      _showActionMenu = false;
-    });
-    _toggleAddMode();
-  }
-
   void _toggleAddMode() {
     setState(() {
       _isAddMode = !_isAddMode;
@@ -335,7 +280,7 @@ class _WebViewPageState extends State<WebViewPage> {
 
     showAutoHideSnackBar(
       context,
-      message: _isAddMode ? 'ニュース追加モードをオンにしました。' : 'ニュース追加モードをオフにしました。',
+      message: _isAddMode ? 'リンクタップで追加モードをオンにしました。' : 'リンクタップで追加モードをオフにしました。',
       duration: const Duration(seconds: 3),
       action: SnackBarAction(
         label: 'OK',
@@ -1288,8 +1233,6 @@ class _WebViewPageState extends State<WebViewPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                if (_showActionMenu) _buildActionMenu(),
-                if (_showActionMenu) const SizedBox(height: 12),
                 _ActionButton(
                   icon: Icons.play_arrow_rounded,
                   tooltip: 'このページを読み上げ',
@@ -1306,9 +1249,10 @@ class _WebViewPageState extends State<WebViewPage> {
                 ),
                 const SizedBox(height: 10),
                 _ActionButton(
-                  icon: Icons.settings,
-                  tooltip: 'その他の操作',
-                  onTap: _toggleActionMenu,
+                  icon: _isAddMode ? Icons.link_off : Icons.link,
+                  tooltip:
+                      _isAddMode ? 'リンクタップで追加をオフ' : 'リンクタップで追加をオン',
+                  onTap: _toggleAddMode,
                 ),
                 const SizedBox(height: 10),
                 _ActionButton(
@@ -1326,44 +1270,6 @@ class _WebViewPageState extends State<WebViewPage> {
     );
   }
 
-  Widget _buildActionMenu() {
-    final toggleLabel = _isAddMode ? 'リンクタップで追加オフ' : 'リンクタップで追加オン';
-    final toggleIcon = _isAddMode ? Icons.link_off : Icons.link;
-    return Material(
-      elevation: 2,
-      borderRadius: BorderRadius.circular(16),
-      color: Theme.of(context).colorScheme.surface,
-      shadowColor: Colors.black12,
-      child: SizedBox(
-        width: 220,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextButton.icon(
-                onPressed: _handleBulkAddFromMenu,
-                icon: const Icon(Icons.tune),
-                label: const Text('一括追加'),
-                style: TextButton.styleFrom(
-                  alignment: Alignment.centerLeft,
-                ),
-              ),
-              TextButton.icon(
-                onPressed: _handleToggleAddModeFromMenu,
-                icon: Icon(toggleIcon),
-                label: Text(toggleLabel),
-                style: TextButton.styleFrom(
-                  alignment: Alignment.centerLeft,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _ExtractedArticle {
