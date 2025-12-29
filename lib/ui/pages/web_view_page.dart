@@ -1184,6 +1184,8 @@ class _WebViewPageState extends State<WebViewPage> {
               useHybridComposition: true,
               mediaPlaybackRequiresUserGesture: false,
               javaScriptEnabled: true,
+              allowsLinkPreview: false,
+              disableLongPressContextMenuOnLinks: false,
             ),
             initialUserScripts:
                 UnmodifiableListView<UserScript>([readabilityScript]),
@@ -1259,8 +1261,7 @@ class _WebViewPageState extends State<WebViewPage> {
                 const SizedBox(height: 10),
                 _ActionButton(
                   icon: _isAddMode ? Icons.link_off : Icons.link,
-                  tooltip:
-                      _isAddMode ? 'リンクタップで追加をオフ' : 'リンクタップで追加をオン',
+                  tooltip: _isAddMode ? 'リンクタップで追加をオフ' : 'リンクタップで追加をオン',
                   onTap: _toggleAddMode,
                 ),
                 const SizedBox(height: 10),
@@ -1278,7 +1279,6 @@ class _WebViewPageState extends State<WebViewPage> {
       ],
     );
   }
-
 }
 
 class _ExtractedArticle {
