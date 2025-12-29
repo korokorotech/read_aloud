@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -114,7 +115,7 @@ class PlayerService extends ChangeNotifier {
     await _flutterTts.setLanguage('ja-JP');
     final storedSpeed = await AppSettings.instance.getPlaybackSpeed();
     _playbackSpeed = storedSpeed;
-    await _flutterTts.setSpeechRate(_playbackSpeed);
+    await _flutterTts.setSpeechRate(_effectiveSpeechRate(_playbackSpeed));
     await _flutterTts.awaitSpeakCompletion(true);
     _flutterTts.setErrorHandler((msg) {
       _stopRequested = true;
@@ -236,7 +237,7 @@ class PlayerService extends ChangeNotifier {
       return;
     }
     _playbackSpeed = speed;
-    await _flutterTts.setSpeechRate(speed);
+    await _flutterTts.setSpeechRate(_effectiveSpeechRate(speed));
     notifyListeners();
     await AppSettings.instance.setPlaybackSpeed(speed);
   }
@@ -423,7 +424,7 @@ class PlayerService extends ChangeNotifier {
     final storedSpeed = await settings.getPlaybackSpeed();
     if ((storedSpeed - _playbackSpeed).abs() >= 0.0001) {
       _playbackSpeed = storedSpeed;
-      await _flutterTts.setSpeechRate(_playbackSpeed);
+      await _flutterTts.setSpeechRate(_effectiveSpeechRate(_playbackSpeed));
       notifyListeners();
     }
   }
@@ -561,5 +562,9 @@ class PlayerService extends ChangeNotifier {
 
     // 見つからなければ、残り全部（searchEndがlenなら末尾まで）
     return searchEnd;
+  }
+
+  double _effectiveSpeechRate(double rate) {
+    return Platform.isIOS ? rate * 0.5 : rate;
   }
 }
