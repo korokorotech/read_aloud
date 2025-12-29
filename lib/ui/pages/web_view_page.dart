@@ -236,11 +236,12 @@ class _WebViewPageState extends State<WebViewPage> {
       return;
     }
     final normalizedUrl = _normalizeUrl(urlStr) ?? urlStr;
+    final shortUrl = _shortenForSnackBar(normalizedUrl);
 
     if (!mounted) return;
     showAutoHideSnackBar(
       context,
-      message: '現在のページを解析中です: $normalizedUrl',
+      message: '現在のページを解析中です: $shortUrl',
     );
 
     try {
@@ -249,7 +250,7 @@ class _WebViewPageState extends State<WebViewPage> {
       if (article == null || article.content.isEmpty) {
         showAutoHideSnackBar(
           context,
-          message: '本文を取得できませんでした: $normalizedUrl',
+          message: '本文を取得できませんでした: $shortUrl',
         );
         return;
       }
@@ -623,10 +624,11 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   Future<void> _captureArticle(String url) async {
+    final shortUrl = _shortenForSnackBar(url);
     if (!mounted) return;
     showAutoHideSnackBar(
       context,
-      message: '本文を解析中です: $url',
+      message: '本文を解析中です: $shortUrl',
     );
 
     try {
@@ -636,7 +638,7 @@ class _WebViewPageState extends State<WebViewPage> {
       if (article == null || article.content.isEmpty) {
         showAutoHideSnackBar(
           context,
-          message: '本文を取得できませんでした: $url',
+          message: '本文を取得できませんでした: $shortUrl',
         );
         return;
       }
@@ -1036,6 +1038,13 @@ class _WebViewPageState extends State<WebViewPage> {
         .replaceAll(RegExp(r'\n\s*\n+'), '\n')
         .replaceAll(RegExp(r'\t+'), ' ')
         .trim();
+  }
+
+  String _shortenForSnackBar(String input, {int maxLength = 80}) {
+    if (input.length <= maxLength || maxLength <= 3) {
+      return input;
+    }
+    return '${input.substring(0, maxLength - 3)}...';
   }
 
   String? _normalizeUrl(String url) {
