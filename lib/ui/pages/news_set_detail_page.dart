@@ -11,7 +11,6 @@ import 'package:read_aloud/repositories/news_item_repository.dart';
 import 'package:read_aloud/services/app_settings.dart';
 import 'package:read_aloud/services/player_service.dart';
 import 'package:read_aloud/ui/modals/news_set_create_modal.dart';
-import 'package:read_aloud/ui/pages/article_web_view_page.dart';
 import 'package:read_aloud/ui/routes/app_router.dart';
 import 'package:read_aloud/ui/widgets/snack_bar_helper.dart';
 
@@ -238,6 +237,10 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
   }
 
   Future<void> _openNewsItemUrl(NewsItemRecord item) async {
+    final detail = _detail;
+    if (detail == null) {
+      return;
+    }
     final uri = Uri.tryParse(item.url);
     if (uri == null) {
       if (!mounted) return;
@@ -248,17 +251,11 @@ class _NewsSetDetailPageState extends State<NewsSetDetailPage> {
       return;
     }
 
-    final title = item.previewText.trim().isEmpty
-        ? _extractDomain(item.url)
-        : item.previewText;
-
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ArticleWebViewPage(
-          initialUrl: uri,
-          title: title,
-        ),
-      ),
+    await context.pushWebView(
+      setId: detail.id,
+      setName: detail.name,
+      initialUrl: uri,
+      openAddMode: false,
     );
   }
 
