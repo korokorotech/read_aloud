@@ -735,15 +735,16 @@ class _WebViewPageState extends State<WebViewPage> {
 
     headless = HeadlessInAppWebView(
       initialSettings: InAppWebViewSettings(
-        javaScriptEnabled: true,
-        mediaPlaybackRequiresUserGesture: false,
-        clearCache: true,
-        isInspectable: kDebugMode ? true : false,
-        safeBrowsingEnabled: kDebugMode ? false : true,
-        supportMultipleWindows: true,
-        javaScriptCanOpenWindowsAutomatically: true,
-        disableLongPressContextMenuOnLinks: true,
-      ),
+          javaScriptEnabled: true,
+          mediaPlaybackRequiresUserGesture: false,
+          clearCache: true,
+          isInspectable: kDebugMode ? true : false,
+          safeBrowsingEnabled: kDebugMode ? false : true,
+          supportMultipleWindows: true,
+          javaScriptCanOpenWindowsAutomatically: true,
+          disableLongPressContextMenuOnLinks: true,
+          userAgent:
+              "Mozilla/5.0 (Linux; Android 11; sdk_gphone_arm64 Build/RSR1.201216.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/83.0.4103.106 Mobile Safari/537.36"),
       initialUserScripts: UnmodifiableListView<UserScript>([userScript]),
       onCreateWindow: (controller, createWindowRequest) async {
         final targetUrl = createWindowRequest.request.url;
@@ -839,12 +840,18 @@ class _WebViewPageState extends State<WebViewPage> {
       final title = (result['title'] as String?)?.trim();
       final html = result['html'] as String?;
       final textFallback = (result['text'] as String?) ?? '';
+
+      final hasReadMoreHint = result['hasReadMoreHint'] == true;
       if (html == null || html.trim().isEmpty) {
         final normalized = normalize(textFallback);
         if (normalized.isEmpty) {
           return null;
         }
-        return _ExtractedArticle(title: title, content: normalized);
+        return _ExtractedArticle(
+          title: title,
+          content: normalized,
+          hasReadMoreHint: hasReadMoreHint,
+        );
       }
       final extracted = _extractMainTextFromReadabilityHtml(html);
       final normalized =
@@ -856,6 +863,7 @@ class _WebViewPageState extends State<WebViewPage> {
         title: title,
         content: normalized,
         html: html,
+        hasReadMoreHint: hasReadMoreHint,
       );
     } else {
       _logWithSave('Readability failed: ${result['error']}');
@@ -888,6 +896,7 @@ class _WebViewPageState extends State<WebViewPage> {
   void _logWithSave(String message) {
     final line = '[${DateTime.now().toIso8601String()}] ${message.trimRight()}';
     debugPrint(line);
+    if (kDebugMode) return;
     unawaited(_appendLogLine(line));
   }
 
@@ -934,13 +943,12 @@ class _WebViewPageState extends State<WebViewPage> {
     if (article == null) {
       return true;
     }
-    final text = article.content.trim();
-    if (text.length < 200) {
+    if (article.hasReadMoreHint) {
       return true;
     }
-    final ret = _readMoreKeywords.any(text.contains);
-    debugPrint("TEST_D 90 _looksTruncated $ret");
-    return ret;
+    const minLength = 200;
+    final text = article.content.trim();
+    return text.length < minLength;
   }
 
   String _extractMainTextFromReadabilityHtml(String html) {
@@ -1286,11 +1294,13 @@ class _ExtractedArticle {
     this.title,
     required this.content,
     this.html,
+    this.hasReadMoreHint = false,
   });
 
   final String? title;
   final String content;
   final String? html;
+  final bool hasReadMoreHint;
 }
 
 enum _LinkAction {
@@ -1369,36 +1379,49 @@ const List<String> _readMoreKeywords = [
   'Read more',
 ];
 
-const _readabilityExtractorJs = r'''
+final String _readabilityExtractorJs = _buildReadabilityExtractorJs();
+
+final _clickReadMoreJs = _buildClickReadMoreJs();
+
+String _buildReadabilityExtractorJs() {
+  final keywordsJson = jsonEncode(_readMoreKeywords);
+  return '''
 (() => {
   try {
+    const KEYWORDS = $keywordsJson;
+    const toStr = (s) => (s || '');
+    const beforeText = toStr(document.body?.innerText);
+    const beforeHtml = toStr(document.documentElement?.outerHTML);
+    const hasReadMoreHint = KEYWORDS.some((k) => beforeText.includes(k) || beforeHtml.includes(k));
+
     if (typeof Readability === 'undefined') {
-      return JSON.stringify({ ok: false, error: 'Readability not found' });
+      return JSON.stringify({ ok: false, error: 'Readability not found', hasReadMoreHint });
     }
     const doc = document.cloneNode(true);
-    const article = new Readability(doc).parse();
+    doc.querySelectorAll('footer, nav, header, aside, script, style, noscript, iframe, [role="contentinfo"], [role="navigation"]')
+      .forEach(el => el.remove());
+
+    const article = new Readability(doc, {charThreshold:200, linkDensityModifier:0.5}).parse();
 
     if (!article) {
-      return JSON.stringify({ ok: false, error: 'No article' });
+      return JSON.stringify({ ok: false, error: 'No article', hasReadMoreHint });
     }
 
     const text = article.textContent || '';
-    const html = article.content || '';
     const title = article.title || '';
 
     return JSON.stringify({
       ok: true,
       title,
       text,
-      html
+      hasReadMoreHint
     });
   } catch (e) {
-    return JSON.stringify({ ok: false, error: String(e) });
+    return JSON.stringify({ ok: false, error: String(e), hasReadMoreHint: false });
   }
 })()
 ''';
-
-final _clickReadMoreJs = _buildClickReadMoreJs();
+}
 
 String _buildClickReadMoreJs() {
   final keywordsJson = jsonEncode(_readMoreKeywords);
