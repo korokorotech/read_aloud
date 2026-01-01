@@ -13,6 +13,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:read_aloud/entities/news_item_record.dart';
 import 'package:read_aloud/repositories/news_item_repository.dart';
 import 'package:read_aloud/repositories/news_set_repository.dart';
+import 'package:read_aloud/services/app_settings.dart';
 import 'package:read_aloud/services/player_service.dart';
 import 'package:read_aloud/ui/routes/app_router.dart';
 import 'package:read_aloud/ui/widgets/snack_bar_helper.dart';
@@ -44,12 +45,15 @@ class _WebViewPageState extends State<WebViewPage> {
   late final NewsItemRepository _newsItemRepository;
   late final NewsSetRepository _newsSetRepository;
   final PlayerService _player = PlayerService.instance;
+  final AppSettings _settings = AppSettings.instance;
   InAppWebViewController? _webViewController;
   late final Future<UserScript> _readabilityUserScriptFuture;
   bool _hasExistingSet = false;
   bool _isCheckingSetExists = true;
   static const int _contextMenuBatchSize = 10;
+  static const int _contextMenuFetchLimitMultiplier = 4;
   _PreparedLink? _pendingLongPressLink;
+  int _minArticleLength = 200;
 
   @override
   void initState() {
@@ -60,6 +64,7 @@ class _WebViewPageState extends State<WebViewPage> {
     _newsSetRepository = NewsSetRepository();
     _readabilityUserScriptFuture = _loadReadabilityUserScript();
     unawaited(_checkSetExists());
+    unawaited(_loadSettings());
     if (Platform.isAndroid) {
       InAppWebViewController.setWebContentsDebuggingEnabled(true);
     }
@@ -88,6 +93,14 @@ class _WebViewPageState extends State<WebViewPage> {
         _isCheckingSetExists = false;
       });
     }
+  }
+
+  Future<void> _loadSettings() async {
+    final minLength = await _settings.getMinArticleLength();
+    if (!mounted) return;
+    setState(() {
+      _minArticleLength = minLength;
+    });
   }
 
   void _markSetAsAvailable() {
@@ -327,7 +340,7 @@ class _WebViewPageState extends State<WebViewPage> {
     final links = await _collectForwardLinks(
       controller,
       link.anchorUrl,
-      _contextMenuBatchSize,
+      _contextMenuBatchSize * _contextMenuFetchLimitMultiplier,
     );
     if (links.isEmpty) {
       if (!mounted) return;
@@ -337,7 +350,10 @@ class _WebViewPageState extends State<WebViewPage> {
       );
       return;
     }
-    await _captureMultipleArticles(links);
+    await _captureMultipleArticles(
+      links,
+      targetCount: _contextMenuBatchSize,
+    );
   }
 
   Future<_PreparedLink?> _prepareLongPressLink(
@@ -550,24 +566,37 @@ class _WebViewPageState extends State<WebViewPage> {
     return [];
   }
 
-  Future<void> _captureMultipleArticles(List<String> urls) async {
+  Future<void> _captureMultipleArticles(
+    List<String> urls, {
+    int targetCount = _contextMenuBatchSize,
+  }) async {
     if (urls.isEmpty) {
       return;
     }
     if (!mounted) return;
     showAutoHideSnackBar(
       context,
-      message: '${urls.length}件のリンクを解析しています…',
+      message: '$targetCount件のリンクを解析しています…',
     );
     final inserted = <NewsItemRecord>[];
     var duplicateCount = 0;
     var failureCount = 0;
+    var skippedByLength = 0;
     for (final url in urls) {
+      if (inserted.length >= targetCount) {
+        break;
+      }
       final normalized = _normalizeUrl(url) ?? url;
       try {
         final article = await _extractArticleFromUrl(normalized);
         if (article == null || article.content.isEmpty) {
           failureCount++;
+          continue;
+        }
+        final contentLength = article.content.trim().length;
+        final minLength = _minArticleLength;
+        if (minLength > 0 && contentLength < minLength) {
+          skippedByLength++;
           continue;
         }
         final saved = await _saveExtractedArticle(normalized, article);
@@ -581,19 +610,37 @@ class _WebViewPageState extends State<WebViewPage> {
     }
     if (!mounted) return;
     if (inserted.isEmpty) {
-      final detail = (duplicateCount > 0 || failureCount > 0)
-          ? '（重複$duplicateCount件/失敗$failureCount件）'
-          : '';
+      final detailParts = <String>[];
+      if (duplicateCount > 0) {
+        detailParts.add('重複$duplicateCount件');
+      }
+      if (failureCount > 0) {
+        detailParts.add('失敗$failureCount件');
+      }
+      if (skippedByLength > 0) {
+        detailParts.add('短すぎ$skippedByLength件');
+      }
+      final detail = detailParts.isEmpty ? '' : '（${detailParts.join('/')}）';
       showAutoHideSnackBar(
         context,
         message: 'リンクを追加できませんでした$detail',
       );
       return;
     }
+    final detailParts = <String>[];
+    if (duplicateCount > 0) {
+      detailParts.add('重複$duplicateCount件');
+    }
+    if (failureCount > 0) {
+      detailParts.add('失敗$failureCount件');
+    }
+    if (skippedByLength > 0) {
+      detailParts.add('短すぎ$skippedByLength件');
+    }
+    final detail = detailParts.isEmpty ? '' : '（${detailParts.join('/')}）';
     showAutoHideSnackBar(
       context,
-      message:
-          '${inserted.length}件のリンクをキューに追加しました（重複$duplicateCount件/失敗$failureCount件）',
+      message: '${inserted.length}件のリンクをキューに追加しました$detail',
       duration: const Duration(seconds: 4),
       action: SnackBarAction(
         label: 'もとに戻す',
@@ -639,6 +686,16 @@ class _WebViewPageState extends State<WebViewPage> {
         showAutoHideSnackBar(
           context,
           message: '本文を取得できませんでした: $shortUrl',
+        );
+        return;
+      }
+
+      final contentLength = article.content.trim().length;
+      final minLength = _minArticleLength;
+      if (minLength > 0 && contentLength < minLength) {
+        showAutoHideSnackBar(
+          context,
+          message: '本文が短いため追加しませんでした（$contentLength文字/閾値$minLength）',
         );
         return;
       }
@@ -779,8 +836,10 @@ class _WebViewPageState extends State<WebViewPage> {
           if (loadCount == 1) {
             firstArticle = article;
           }
+          final truncated = _looksTruncated(article);
+          _logWithSave("TEST_D 70_1 truncated: $truncated");
 
-          if (!triedReadMoreClick && _looksTruncated(article)) {
+          if (!triedReadMoreClick && truncated) {
             triedReadMoreClick = true;
             _logWithSave("TEST_D 71 _tryClickReadMore from now");
             final clicked = await _tryClickReadMore(controller);
@@ -940,15 +999,10 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   bool _looksTruncated(_ExtractedArticle? article) {
-    if (article == null) {
+    if (article?.hasReadMoreHint == true) {
       return true;
     }
-    if (article.hasReadMoreHint) {
-      return true;
-    }
-    const minLength = 200;
-    final text = article.content.trim();
-    return text.length < minLength;
+    return false;
   }
 
   String _extractMainTextFromReadabilityHtml(String html) {

@@ -23,6 +23,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _readPreviewBeforeArticle = true;
   double _playbackSpeed = 1.0;
   NewsSetRetentionOption _newsSetRetentionOption = NewsSetRetentionOption.keep;
+  int _minArticleLength = 200;
 
   @override
   void initState() {
@@ -37,6 +38,7 @@ class _SettingsPageState extends State<SettingsPage> {
         await _settings.getReadPreviewBeforeArticle();
     final playbackSpeed = await _settings.getPlaybackSpeed();
     final newsSetRetention = await _settings.getNewsSetRetentionOption();
+    final minArticleLength = await _settings.getMinArticleLength();
     if (!mounted) return;
     setState(() {
       _defaultAddOption = addOption;
@@ -44,6 +46,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _readPreviewBeforeArticle = readPreviewBeforeArticle;
       _playbackSpeed = playbackSpeed;
       _newsSetRetentionOption = newsSetRetention;
+      _minArticleLength = minArticleLength;
       _isLoading = false;
     });
   }
@@ -83,6 +86,14 @@ class _SettingsPageState extends State<SettingsPage> {
       _newsSetRetentionOption = option;
     });
     await _settings.setNewsSetRetentionOption(option);
+  }
+
+  Future<void> _updateMinArticleLength(double value) async {
+    final length = value.round();
+    setState(() {
+      _minArticleLength = length;
+    });
+    await _settings.setMinArticleLength(length);
   }
 
   @override
@@ -210,6 +221,40 @@ class _SettingsPageState extends State<SettingsPage> {
                         _updateNewsSetRetentionOption(value);
                       }
                     },
+                  ),
+                  const SizedBox(height: 24),
+                  InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: '記事の最小文字数 (キュー追加時)',
+                      helperText: '0で制限なし、最大1000文字',
+                      border: OutlineInputBorder(),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Slider(
+                          value: _minArticleLength.toDouble(),
+                          min: 0,
+                          max: 1000,
+                          divisions: 100,
+                          label: _minArticleLength == 0
+                              ? '制限なし'
+                              : '$_minArticleLength 文字以上',
+                          onChanged: (value) {
+                            setState(() {
+                              _minArticleLength = value.round();
+                            });
+                          },
+                          onChangeEnd: _updateMinArticleLength,
+                        ),
+                        Text(
+                          _minArticleLength == 0
+                              ? '制限なし'
+                              : '${_minArticleLength}文字以上で追加',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

@@ -14,6 +14,7 @@ class AppSettings {
       'read_preview_before_article_enabled';
   static const _keyPlaybackSpeed = 'playback_speed';
   static const _keyNewsSetRetention = 'news_set_retention';
+  static const _keyMinArticleLength = 'min_article_length';
 
   Future<NewsSetAddOption> getDefaultAddOption() async {
     final prefs = await SharedPreferences.getInstance();
@@ -63,6 +64,17 @@ class AppSettings {
     await prefs.setDouble(_keyPlaybackSpeed, speed);
   }
 
+  Future<int> getMinArticleLength() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getInt(_keyMinArticleLength);
+    return _normalizeMinArticleLength(value);
+  }
+
+  Future<void> setMinArticleLength(int length) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyMinArticleLength, _normalizeMinArticleLength(length));
+  }
+
   Future<NewsSetRetentionOption> getNewsSetRetentionOption() async {
     final prefs = await SharedPreferences.getInstance();
     final value = prefs.getString(_keyNewsSetRetention);
@@ -77,5 +89,12 @@ class AppSettings {
   ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyNewsSetRetention, option.name);
+  }
+
+  int _normalizeMinArticleLength(int? value) {
+    final v = value ?? 200;
+    if (v < 0) return 0;
+    if (v > 1000) return 1000;
+    return v;
   }
 }
