@@ -391,41 +391,54 @@ class _WebViewPageState extends State<WebViewPage> {
   }) async {
     if (!mounted) return null;
     final theme = Theme.of(context);
+    final maxSheetHeight = MediaQuery.of(context).size.height * 0.7;
     final trimmedTitle = title?.trim();
-    final label =
-        trimmedTitle != null && trimmedTitle.isNotEmpty ? trimmedTitle : url;
+    final label = trimmedTitle != null && trimmedTitle.isNotEmpty
+        ? _shortenForSnackBar(trimmedTitle)
+        : _shortenForSnackBar(url);
+    final shortUrl = _shortenForSnackBar(url);
     return showModalBottomSheet<_LinkAction>(
       context: context,
+      isScrollControlled: true,
+      constraints: BoxConstraints(maxHeight: maxSheetHeight),
       builder: (context) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ListTile(
-                dense: true,
-                title: Text(
-                  label,
-                  style: theme.textTheme.bodyMedium,
-                ),
-                subtitle: Text(
-                  url,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ListTile(
+                    dense: true,
+                    title: Text(
+                      label,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    subtitle: Text(
+                      shortUrl,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.library_add),
+                    title: const Text('リンク先を読み上げに追加'),
+                    onTap: () =>
+                        Navigator.of(context).pop(_LinkAction.addSingle),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.format_list_numbered),
+                    title: const Text('選択以降の10件を読み上げに追加'),
+                    onTap: () =>
+                        Navigator.of(context).pop(_LinkAction.addBatch),
+                  ),
+                ],
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.library_add),
-                title: const Text('リンク先を読み上げに追加'),
-                onTap: () => Navigator.of(context).pop(_LinkAction.addSingle),
-              ),
-              ListTile(
-                leading: const Icon(Icons.format_list_numbered),
-                title: const Text('選択以降の10件を読み上げに追加'),
-                onTap: () => Navigator.of(context).pop(_LinkAction.addBatch),
-              ),
-            ],
+            ),
           ),
         );
       },

@@ -165,8 +165,9 @@ class _NewsSetCreateModalState extends State<NewsSetCreateModal> {
                   child: DropdownButton<NewsSetAddOption>(
                     value: _selectedOption,
                     isExpanded: true,
+                    itemHeight: null,
                     items: NewsSetAddOption.values
-                        .map(
+                        .map<DropdownMenuItem<NewsSetAddOption>>(
                           (option) => DropdownMenuItem(
                             value: option,
                             child: Column(
