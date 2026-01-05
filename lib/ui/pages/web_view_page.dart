@@ -50,6 +50,7 @@ class _WebViewPageState extends State<WebViewPage> {
   late final Future<UserScript> _readabilityUserScriptFuture;
   bool _hasExistingSet = false;
   bool _isCheckingSetExists = true;
+  bool _pendingBackCheckForGoogleNews = false;
   static const int _contextMenuBatchSize = 10;
   static const int _contextMenuFetchLimitMultiplier = 4;
   _PreparedLink? _pendingLongPressLink;
@@ -114,9 +115,16 @@ class _WebViewPageState extends State<WebViewPage> {
     });
   }
 
-  Future<bool> _goBackInWebViewIfPossible() async {
+  Future<bool> _goBackInWebViewIfPossible({bool fromBackPress = false}) async {
     final controller = _webViewController;
-    if (controller != null && await controller.canGoBack()) {
+    if (controller == null) {
+      return false;
+    }
+
+    if (await controller.canGoBack()) {
+      if (fromBackPress) {
+        _pendingBackCheckForGoogleNews = true;
+      }
       await controller.goBack();
       return true;
     }
@@ -124,7 +132,7 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   Future<void> _handleBack() async {
-    if (await _goBackInWebViewIfPossible()) {
+    if (await _goBackInWebViewIfPossible(fromBackPress: true)) {
       return;
     }
 
@@ -136,7 +144,7 @@ class _WebViewPageState extends State<WebViewPage> {
   }
 
   Future<bool> _handleSystemBack() async {
-    final handled = await _goBackInWebViewIfPossible();
+    final handled = await _goBackInWebViewIfPossible(fromBackPress: true);
     return !handled;
   }
 
@@ -1267,6 +1275,21 @@ class _WebViewPageState extends State<WebViewPage> {
             onWebViewCreated: (controller) {
               _webViewController = controller;
             },
+            onLoadStart: (controller, url) {
+              debugPrint("TEST_D 400 $url");
+            },
+            onLoadStop: (controller, url) async {
+              debugPrint("TEST_D 401 $url");
+              // 「戻る」起点で news.google.com に戻った場合のみ再度戻る
+              if (_pendingBackCheckForGoogleNews &&
+                  url?.host == 'news.google.com' &&
+                  await controller.canGoBack()) {
+                _pendingBackCheckForGoogleNews = false;
+                await controller.goBack();
+              } else {
+                _pendingBackCheckForGoogleNews = false;
+              }
+            },
             onLongPressHitTestResult: (controller, hitTestResult) async {
               final type = hitTestResult.type;
               final isLink = type ==
@@ -1298,6 +1321,12 @@ class _WebViewPageState extends State<WebViewPage> {
               }
             },
             shouldOverrideUrlLoading: (controller, navigationAction) async {
+              final list = await Future.wait(
+                  [controller.getOriginalUrl(), controller.getUrl()]);
+              debugPrint(
+                  "TEST_D 402 ${navigationAction.request.url} ${list[0]}");
+              debugPrint("TEST_D 403 ${list[0]} ${list[1]}");
+
               final uri = navigationAction.request.url;
               if (_isAddMode &&
                   uri != null &&
